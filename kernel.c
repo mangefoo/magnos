@@ -73,6 +73,48 @@ void kernel_main(void) {
         /* List files */
         fat32_list_root();
         vga_puts("\n");
+
+        /* Try to read hello.txt */
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        vga_puts("Reading HELLO.TXT...\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+        fat32_file_t *file = fat32_open("HELLO.TXT");
+        if (file) {
+            vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+            vga_puts("File found! Contents:\n");
+            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+            vga_puts("---\n");
+
+            /* Read file contents (max 512 bytes for now) */
+            uint8_t buffer[512];
+            int bytes_read = fat32_read(file, buffer, sizeof(buffer) - 1);
+
+            if (bytes_read > 0) {
+                /* Null terminate */
+                buffer[bytes_read] = '\0';
+
+                /* Print contents */
+                for (int i = 0; i < bytes_read; i++) {
+                    vga_putchar(buffer[i]);
+                }
+            } else {
+                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                vga_puts("Failed to read file\n");
+            }
+
+            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+            vga_puts("\n---\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+            fat32_close(file);
+        } else {
+            vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+            vga_puts("File not found\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+
+        vga_puts("\n");
     } else {
         vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         vga_puts("FAILED\n");

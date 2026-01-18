@@ -76,6 +76,9 @@ $(HDD_IMG):
 	dd if=/dev/zero of=$@ bs=1M count=10
 	mkfs.fat -F 32 $@
 	@echo "Created 10MB FAT32 disk image"
+	@if [ -f hello.txt ]; then \
+		mcopy -i $@ hello.txt ::HELLO.TXT && echo "Added hello.txt to disk"; \
+	fi
 
 # Run in QEMU (no hard disk)
 run: $(OS_IMG)
