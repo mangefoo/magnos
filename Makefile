@@ -17,6 +17,7 @@ KERNEL_BIN = kernel.bin
 OS_IMG = magnos.img
 HDD_IMG = hdd.img
 HELLO_BIN = userspace/hello
+PRINT_BIN = userspace/print
 
 # Object files
 KERNEL_ENTRY_OBJ = kernel_entry.o
@@ -90,8 +91,14 @@ $(HELLO_BIN): userspace/hello.c userspace/crt0.c userspace/libmagnos.h
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/hello.c
 
+# Build userspace print program
+$(PRINT_BIN): userspace/print.c userspace/crt0.c userspace/libmagnos.h
+	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
+		-o $@ userspace/crt0.c userspace/print.c
+
 # Create hard disk image (10MB) formatted as FAT32
-$(HDD_IMG): $(HELLO_BIN)
+$(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN)
 	dd if=/dev/zero of=$@ bs=1M count=10
 	mkfs.fat -F 32 $@
 	@echo "Created 10MB FAT32 disk image"
@@ -100,6 +107,9 @@ $(HDD_IMG): $(HELLO_BIN)
 	fi
 	@if [ -f $(HELLO_BIN) ]; then \
 		mcopy -i $@ $(HELLO_BIN) ::HELLO && echo "Added hello binary to disk"; \
+	fi
+	@if [ -f $(PRINT_BIN) ]; then \
+		mcopy -i $@ $(PRINT_BIN) ::PRINT && echo "Added print binary to disk"; \
 	fi
 
 # Run in QEMU (no hard disk)
