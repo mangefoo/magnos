@@ -59,13 +59,32 @@ static void ide_400ns_delay(void) {
 
 /* Initialize IDE controller */
 int ide_init(void) {
-    /* Software reset */
-    outb(IDE_PRIMARY_CTRL, 0x04);
+    /* Disable interrupts first */
+    outb(IDE_PRIMARY_CTRL, 0x02);
     ide_400ns_delay();
-    outb(IDE_PRIMARY_CTRL, 0x00);
+
+    /* Check if drive exists by reading status */
+    uint8_t status = inb(IDE_PRIMARY_BASE + IDE_REG_STATUS);
+
+    /* If status is 0xFF, no drive present */
+    if (status == 0xFF) {
+        return -1;
+    }
+
+    /* Select drive 0 (master) */
+    outb(IDE_PRIMARY_BASE + IDE_REG_DRIVE, 0xA0);
+    ide_400ns_delay();
 
     /* Wait for controller to be ready */
-    if (ide_wait_ready() != 0) {
+    int timeout = 100000;
+    while (timeout--) {
+        status = inb(IDE_PRIMARY_BASE + IDE_REG_STATUS);
+        if (!(status & IDE_STATUS_BSY)) {
+            break;
+        }
+    }
+
+    if (timeout <= 0) {
         return -1;
     }
 

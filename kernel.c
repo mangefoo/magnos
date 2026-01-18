@@ -1,6 +1,7 @@
 #include "vga.h"
 #include "serial.h"
 #include "ide.h"
+#include "fat32.h"
 
 /* Kernel main function */
 void kernel_main(void) {
@@ -58,34 +59,26 @@ void kernel_main(void) {
     vga_puthex(SERIAL_COM1);
     vga_puts("\n\n");
 
-    /* Test IDE disk I/O */
+    /* Initialize FAT32 filesystem */
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    vga_puts("Testing IDE Disk...\n");
+    vga_puts("Initializing FAT32 Filesystem...\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
-    uint16_t buffer[256];  /* 512-byte sector */
-
-    /* Try to read sector 0 */
-    vga_puts("Reading sector 0: ");
-    if (ide_read_sectors(0, 0, 1, buffer) == 0) {
+    vga_puts("FAT32: ");
+    if (fat32_init(0) == 0) {
         vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-        vga_puts("OK\n");
+        vga_puts("OK\n\n");
         vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
-        /* Show first few bytes */
-        vga_puts("First 4 words: ");
-        for (int i = 0; i < 4; i++) {
-            vga_puthex(buffer[i]);
-            vga_puts(" ");
-        }
+        /* List files */
+        fat32_list_root();
         vga_puts("\n");
     } else {
         vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         vga_puts("FAILED\n");
         vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        vga_puts("(Disk may not be formatted as FAT32)\n\n");
     }
-
-    vga_puts("\n");
 
     vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
     vga_puts("System ready. Type in terminal for serial echo!\n");

@@ -23,8 +23,9 @@ KERNEL_OBJ = kernel.o
 VGA_OBJ = vga.o
 SERIAL_OBJ = serial.o
 IDE_OBJ = ide.o
+FAT32_OBJ = fat32.o
 
-OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ)
+OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ)
 
 # Default target
 all: $(OS_IMG)
@@ -38,7 +39,7 @@ $(KERNEL_ENTRY_OBJ): kernel_entry.asm
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Build kernel objects
-$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h
+$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(VGA_OBJ): vga.c vga.h
@@ -48,6 +49,9 @@ $(SERIAL_OBJ): serial.c serial.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(IDE_OBJ): ide.c ide.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(FAT32_OBJ): fat32.c fat32.h ide.h vga.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link kernel to ELF
@@ -67,10 +71,11 @@ $(OS_IMG): $(BOOT_BIN) $(KERNEL_BIN)
 		dd if=/dev/zero bs=1 count=$$((1474560 - $$SIZE)) >> $@; \
 	fi
 
-# Create hard disk image (10MB)
+# Create hard disk image (10MB) formatted as FAT32
 $(HDD_IMG):
 	dd if=/dev/zero of=$@ bs=1M count=10
-	@echo "Created 10MB hard disk image"
+	mkfs.fat -F 32 $@
+	@echo "Created 10MB FAT32 disk image"
 
 # Run in QEMU (no hard disk)
 run: $(OS_IMG)
@@ -78,7 +83,7 @@ run: $(OS_IMG)
 
 # Run in QEMU with hard disk
 run-hdd: $(OS_IMG) $(HDD_IMG)
-	qemu-system-i386 -drive file=$(OS_IMG),format=raw,index=0,if=floppy -drive file=$(HDD_IMG),format=raw,if=ide -serial stdio
+	qemu-system-i386 -drive file=$(OS_IMG),format=raw,index=0,if=floppy -drive file=$(HDD_IMG),format=raw,if=ide,index=0,media=disk -boot a -serial stdio
 
 # Run with serial output to file
 run-serial-file: $(OS_IMG)

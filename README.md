@@ -7,6 +7,8 @@ A simple bootable x86 operating system written in C and assembly.
 - Custom bootloader with protected mode switching
 - VGA text mode driver with color support
 - Serial port (COM1) driver for I/O
+- IDE/ATA hard disk driver
+- FAT32 filesystem support
 - Interactive serial console
 
 ## Requirements
@@ -55,6 +57,18 @@ make run
 
 This will start QEMU with the OS. You'll see output in both the QEMU window (VGA) and your terminal (serial).
 
+### Run with FAT32 hard disk
+
+```bash
+make run-hdd
+```
+
+This will:
+- Create a 10MB FAT32-formatted hard disk image (hdd.img) if it doesn't exist
+- Boot MagnOS with the hard disk attached
+- Initialize the IDE driver and mount the FAT32 filesystem
+- List all files in the root directory
+
 ### Run with QEMU monitor
 
 ```bash
@@ -85,6 +99,8 @@ gdb -ex "target remote localhost:1234" -ex "symbol-file kernel.bin"
 - `kernel.c` - Main kernel code
 - `vga.c/vga.h` - VGA text mode driver
 - `serial.c/serial.h` - Serial port driver (COM1)
+- `ide.c/ide.h` - IDE/ATA hard disk driver
+- `fat32.c/fat32.h` - FAT32 filesystem driver
 - `linker.ld` - Linker script
 - `Makefile` - Build system
 
@@ -100,12 +116,47 @@ gdb -ex "target remote localhost:1234" -ex "symbol-file kernel.bin"
 2. Bootloader loads kernel from disk to 0x1000
 3. Bootloader sets up GDT and switches to 32-bit protected mode
 4. Bootloader jumps to kernel entry point
-5. Kernel initializes VGA and serial drivers
-6. Kernel displays welcome message and enters interactive loop
+5. Kernel initializes VGA, serial, and IDE drivers
+6. Kernel mounts FAT32 filesystem (if hard disk is attached)
+7. Kernel displays welcome message and file listing
+8. Kernel enters interactive serial console loop
 
 ## Interacting with the OS
 
 The OS provides an interactive echo loop via the serial port. Type in the terminal (where you ran `make run`) and see your input echoed back both in the terminal and on the VGA display.
+
+## Working with FAT32
+
+### Adding files to the disk
+
+You can add files to the FAT32 disk image using standard tools:
+
+**On Linux with mtools:**
+```bash
+# Copy a file to the disk
+mtools -i hdd.img mcopy myfile.txt ::MYFILE.TXT
+
+# List files on the disk
+mtools -i hdd.img mdir
+```
+
+**On Linux with mount:**
+```bash
+# Mount the disk image
+sudo mount -o loop hdd.img /mnt
+
+# Copy files
+sudo cp myfile.txt /mnt/
+
+# Unmount
+sudo umount /mnt
+```
+
+**On Windows:**
+- Use a tool like OSFMount or ImDisk to mount hdd.img as a drive
+- Copy files normally through Windows Explorer
+
+MagnOS will read and display all files in the root directory when it boots with the hard disk attached.
 
 ## Cleaning
 
@@ -123,7 +174,8 @@ This is a minimal OS kernel. You can extend it by adding:
 - Interrupt handling (IDT)
 - Memory management
 - Process/task management
-- File system support
+- FAT32 write support
+- More filesystems (ext2, etc.)
 - More device drivers
 
 ## License
