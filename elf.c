@@ -2,9 +2,11 @@
 #include "vga.h"
 #include "syscall.h"
 
-/* Saved stack pointer for returning from userspace */
+/* Saved context for returning from userspace */
 static uint32_t saved_esp;
 static uint32_t saved_ebp;
+static uint32_t saved_eip;
+static volatile int binary_exited;
 
 /* Memory functions */
 static void* memcpy(void* dest, const void* src, uint32_t n) {
@@ -94,9 +96,12 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size) {
 
     vga_puts("Executing binary at ");
     vga_puthex(entry);
-    vga_puts("\n\n");
+    vga_puts("\n");
 
-    /* Save current stack state before calling binary */
+    /* Reset exit flag */
+    binary_exited = 0;
+
+    /* Save current stack state */
     __asm__ volatile(
         "mov %%esp, %0\n"
         "mov %%ebp, %1\n"
@@ -104,20 +109,22 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size) {
     );
 
     /* Create function pointer and call it */
-    /* The binary will use syscalls to interact with the kernel */
     void (*entry_func)(void) = (void (*)(void))entry;
     entry_func();
 
-    vga_puts("\n[Binary execution completed]\n");
-
+    /* We reach here either normally or after elf_return_to_kernel restores stack */
     return 0;
 }
 
 /* Return from userspace to kernel (called by exit syscall) */
 void elf_return_to_kernel(void) {
+    /* Restore stack and return to elf_load_and_exec */
     __asm__ volatile(
         "mov %0, %%esp\n"
         "mov %1, %%ebp\n"
+        "xor %%eax, %%eax\n"  /* Return 0 */
+        "leave\n"
+        "ret\n"
         :
         : "m"(saved_esp), "m"(saved_ebp)
     );
