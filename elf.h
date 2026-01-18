@@ -78,4 +78,7 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size);
 /* Validate ELF header */
 int elf_validate_header(elf32_ehdr_t *header);
 
+/* Return from userspace to kernel (called by exit syscall) */
+void elf_return_to_kernel(void);
+
 #endif /* ELF_H */

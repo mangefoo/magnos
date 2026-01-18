@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "vga.h"
+#include "elf.h"
 
 /* Memory functions */
 static uint32_t strlen(const char *str) {
@@ -28,6 +29,8 @@ void syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_
             vga_puts("\n[Program exited with code: ");
             vga_puthex(arg1);
             vga_puts("]\n");
+            /* Return control to kernel */
+            elf_return_to_kernel();
             break;
         }
 

@@ -27,8 +27,9 @@ IDE_OBJ = ide.o
 FAT32_OBJ = fat32.o
 ELF_OBJ = elf.o
 SYSCALL_OBJ = syscall.o
+KEYBOARD_OBJ = keyboard.o
 
-OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ)
+OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ) $(KEYBOARD_OBJ)
 
 # Default target
 all: $(OS_IMG)
@@ -42,7 +43,7 @@ $(KERNEL_ENTRY_OBJ): kernel_entry.asm
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Build kernel objects
-$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h elf.h syscall.h
+$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h elf.h syscall.h keyboard.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(VGA_OBJ): vga.c vga.h
@@ -60,7 +61,10 @@ $(FAT32_OBJ): fat32.c fat32.h ide.h vga.h
 $(ELF_OBJ): elf.c elf.h vga.h syscall.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(SYSCALL_OBJ): syscall.c syscall.h vga.h
+$(SYSCALL_OBJ): syscall.c syscall.h vga.h elf.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(KEYBOARD_OBJ): keyboard.c keyboard.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link kernel to ELF

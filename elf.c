@@ -2,6 +2,10 @@
 #include "vga.h"
 #include "syscall.h"
 
+/* Saved stack pointer for returning from userspace */
+static uint32_t saved_esp;
+static uint32_t saved_ebp;
+
 /* Memory functions */
 static void* memcpy(void* dest, const void* src, uint32_t n) {
     uint8_t* d = (uint8_t*)dest;
@@ -92,6 +96,13 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size) {
     vga_puthex(entry);
     vga_puts("\n\n");
 
+    /* Save current stack state before calling binary */
+    __asm__ volatile(
+        "mov %%esp, %0\n"
+        "mov %%ebp, %1\n"
+        : "=m"(saved_esp), "=m"(saved_ebp)
+    );
+
     /* Create function pointer and call it */
     /* The binary will use syscalls to interact with the kernel */
     void (*entry_func)(void) = (void (*)(void))entry;
@@ -100,4 +111,14 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size) {
     vga_puts("\n[Binary execution completed]\n");
 
     return 0;
+}
+
+/* Return from userspace to kernel (called by exit syscall) */
+void elf_return_to_kernel(void) {
+    __asm__ volatile(
+        "mov %0, %%esp\n"
+        "mov %1, %%ebp\n"
+        :
+        : "m"(saved_esp), "m"(saved_ebp)
+    );
 }
