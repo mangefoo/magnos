@@ -52,7 +52,7 @@ print_string:
 load_kernel:
     pusha
     mov bx, KERNEL_OFFSET   ; Destination
-    mov dh, 20              ; Load 20 sectors (10KB, enough for kernel)
+    mov dh, 30              ; Load 30 sectors (15KB, enough for kernel)
     mov dl, [BOOT_DRIVE]    ; Boot drive from BIOS
     call disk_load
     popa

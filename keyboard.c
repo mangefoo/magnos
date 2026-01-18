@@ -47,9 +47,17 @@ static const char scancode_to_ascii_shift[] = {
     '2', '3', '0', '.',  0,   0,   0,   0,     /* 0x50 - 0x57 */
 };
 
+/* PIC ports */
+#define PIC1_DATA  0x21
+#define PIC2_DATA  0xA1
+
 /* Initialize keyboard */
 void keyboard_init(void) {
     int timeout;
+
+    /* Mask all IRQs on both PICs to prevent interrupts without IDT */
+    outb(PIC1_DATA, 0xFF);
+    outb(PIC2_DATA, 0xFF);
 
     /* Wait for keyboard controller to be ready (with timeout) */
     timeout = 10000;
@@ -57,7 +65,34 @@ void keyboard_init(void) {
         timeout--;
     }
 
-    /* Enable keyboard */
+    /* Read current controller configuration */
+    outb(KB_CMD_PORT, 0x20);
+    timeout = 10000;
+    while (!(inb(KB_STATUS_PORT) & KB_STATUS_OUTPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+    uint8_t config = inb(KB_DATA_PORT);
+
+    /* Disable keyboard interrupt (bit 0) but keep keyboard enabled */
+    config &= ~0x01;
+
+    /* Write back configuration */
+    timeout = 10000;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+    outb(KB_CMD_PORT, 0x60);
+    timeout = 10000;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+    outb(KB_DATA_PORT, config);
+
+    /* Enable keyboard interface */
+    timeout = 10000;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
     outb(KB_CMD_PORT, 0xAE);
 
     /* Small delay */

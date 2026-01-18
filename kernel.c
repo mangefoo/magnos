@@ -10,6 +10,78 @@
 #define PRINT_HELLO_TXT      0
 #define ENABLE_HELLO_BINARY  0
 
+/* Command shell buffers (global to avoid stack issues) */
+static char cmd_buf[64];
+static int cmd_pos = 0;
+static uint8_t binary_buffer[65536];
+
+/* Execute a command by loading and running a binary from the filesystem */
+static void execute_command(const char *cmd) {
+    /* Convert to uppercase for FAT32 8.3 filename */
+    char filename[12];
+    int i;
+    for (i = 0; cmd[i] && i < 11; i++) {
+        char ch = cmd[i];
+        if (ch >= 'a' && ch <= 'z') {
+            filename[i] = ch - 32;
+        } else {
+            filename[i] = ch;
+        }
+    }
+    filename[i] = '\0';
+
+    /* Try to open the file */
+    fat32_file_t *file = fat32_open(filename);
+    if (file) {
+        if (file->size > 0 && file->size <= sizeof(binary_buffer)) {
+            int bytes_read = fat32_read(file, binary_buffer, file->size);
+            fat32_close(file);
+
+            if (bytes_read > 0) {
+                /* Check if it's an ELF file */
+                if (binary_buffer[0] == 0x7f &&
+                    binary_buffer[1] == 'E' &&
+                    binary_buffer[2] == 'L' &&
+                    binary_buffer[3] == 'F') {
+
+                    syscall_init();
+                    if (elf_load_and_exec(binary_buffer, bytes_read) != 0) {
+                        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                        vga_puts("Failed to execute binary\n");
+                        serial_puts(SERIAL_COM1, "Failed to execute binary\r\n");
+                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                    }
+                } else {
+                    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                    vga_puts("Not an ELF binary\n");
+                    serial_puts(SERIAL_COM1, "Not an ELF binary\r\n");
+                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                }
+            } else {
+                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                vga_puts("Failed to read file\n");
+                serial_puts(SERIAL_COM1, "Failed to read file\r\n");
+                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+            }
+        } else {
+            fat32_close(file);
+            vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            vga_puts("File too large\n");
+            serial_puts(SERIAL_COM1, "File too large\r\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+    } else {
+        vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+        vga_puts("Command not found: ");
+        vga_puts(filename);
+        vga_putchar('\n');
+        serial_puts(SERIAL_COM1, "Command not found: ");
+        serial_puts(SERIAL_COM1, filename);
+        serial_puts(SERIAL_COM1, "\r\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+}
+
 /* Kernel main function */
 void kernel_main(void) {
     /* Ensure interrupts are disabled (no IDT yet) */
@@ -194,53 +266,52 @@ void kernel_main(void) {
     }
 
     vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    vga_puts("System ready. Type on keyboard or serial!\n");
+    vga_puts("System ready. Type a command or program name!\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
     /* Show prompt */
+    cmd_pos = 0;
     vga_puts("\nMagnOS> ");
     serial_puts(SERIAL_COM1, "\nMagnOS> ");
 
     while (1) {
+        char c = 0;
+
         /* Check keyboard input */
-        char c = keyboard_getchar();
-        if (c != 0) {
-            if (c == '\b') {
-                /* Handle backspace */
+        c = keyboard_getchar();
+
+        /* Check serial input if no keyboard input */
+        if (c == 0 && serial_received(SERIAL_COM1)) {
+            c = serial_getchar(SERIAL_COM1);
+            if (c == '\r') c = '\n';
+        }
+
+        if (c == 0) continue;
+
+        if (c == '\b') {
+            if (cmd_pos > 0) {
+                cmd_pos--;
                 vga_puts("\b \b");
                 serial_putchar(SERIAL_COM1, '\b');
                 serial_putchar(SERIAL_COM1, ' ');
                 serial_putchar(SERIAL_COM1, '\b');
-            } else {
-                /* Echo to VGA */
-                vga_putchar(c);
-
-                /* Echo to serial */
-                serial_putchar(SERIAL_COM1, c);
-
-                /* Handle enter key */
-                if (c == '\n') {
-                    vga_puts("MagnOS> ");
-                    serial_puts(SERIAL_COM1, "MagnOS> ");
-                }
             }
-        }
+        } else if (c == '\n') {
+            vga_putchar('\n');
+            serial_puts(SERIAL_COM1, "\r\n");
 
-        /* Check serial input */
-        if (serial_received(SERIAL_COM1)) {
-            c = serial_getchar(SERIAL_COM1);
+            cmd_buf[cmd_pos] = '\0';
+            if (cmd_pos > 0) {
+                execute_command(cmd_buf);
+            }
 
-            /* Echo to serial */
-            serial_putchar(SERIAL_COM1, c);
-
-            /* Also display on VGA */
+            cmd_pos = 0;
+            vga_puts("MagnOS> ");
+            serial_puts(SERIAL_COM1, "MagnOS> ");
+        } else if (cmd_pos < (int)sizeof(cmd_buf) - 1) {
+            cmd_buf[cmd_pos++] = c;
             vga_putchar(c);
-
-            /* Handle enter key */
-            if (c == '\r' || c == '\n') {
-                vga_puts("MagnOS> ");
-                serial_puts(SERIAL_COM1, "\nMagnOS> ");
-            }
+            serial_putchar(SERIAL_COM1, c);
         }
     }
 }
