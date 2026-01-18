@@ -15,14 +15,16 @@ BOOT_BIN = boot.bin
 KERNEL_ELF = kernel.elf
 KERNEL_BIN = kernel.bin
 OS_IMG = magnos.img
+HDD_IMG = hdd.img
 
 # Object files
 KERNEL_ENTRY_OBJ = kernel_entry.o
 KERNEL_OBJ = kernel.o
 VGA_OBJ = vga.o
 SERIAL_OBJ = serial.o
+IDE_OBJ = ide.o
 
-OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ)
+OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ)
 
 # Default target
 all: $(OS_IMG)
@@ -36,13 +38,16 @@ $(KERNEL_ENTRY_OBJ): kernel_entry.asm
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Build kernel objects
-$(KERNEL_OBJ): kernel.c vga.h serial.h
+$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(VGA_OBJ): vga.c vga.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(SERIAL_OBJ): serial.c serial.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(IDE_OBJ): ide.c ide.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link kernel to ELF
@@ -62,9 +67,18 @@ $(OS_IMG): $(BOOT_BIN) $(KERNEL_BIN)
 		dd if=/dev/zero bs=1 count=$$((1474560 - $$SIZE)) >> $@; \
 	fi
 
-# Run in QEMU
+# Create hard disk image (10MB)
+$(HDD_IMG):
+	dd if=/dev/zero of=$@ bs=1M count=10
+	@echo "Created 10MB hard disk image"
+
+# Run in QEMU (no hard disk)
 run: $(OS_IMG)
 	qemu-system-i386 -drive file=$(OS_IMG),format=raw,index=0,if=floppy -serial stdio
+
+# Run in QEMU with hard disk
+run-hdd: $(OS_IMG) $(HDD_IMG)
+	qemu-system-i386 -drive file=$(OS_IMG),format=raw,index=0,if=floppy -drive file=$(HDD_IMG),format=raw,if=ide -serial stdio
 
 # Run with serial output to file
 run-serial-file: $(OS_IMG)
@@ -83,4 +97,4 @@ debug: $(OS_IMG)
 clean:
 	rm -f *.o *.bin *.elf *.img serial.log
 
-.PHONY: all run run-serial-file run-monitor debug clean
+.PHONY: all run run-hdd run-serial-file run-monitor debug clean

@@ -1,5 +1,6 @@
 #include "vga.h"
 #include "serial.h"
+#include "ide.h"
 
 /* Kernel main function */
 void kernel_main(void) {
@@ -20,7 +21,20 @@ void kernel_main(void) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     vga_puts("Bootable x86 Operating System\n");
     vga_puts("VGA Driver: OK\n");
-    vga_puts("Serial Driver: OK\n\n");
+    vga_puts("Serial Driver: OK\n");
+
+    /* Initialize IDE */
+    vga_puts("IDE Driver: ");
+    if (ide_init() == 0) {
+        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        vga_puts("OK\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        vga_puts("FAILED\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+    vga_puts("\n");
 
     /* Send message to serial port */
     serial_puts(SERIAL_COM1, "MagnOS v0.1 - Serial port initialized\n");
@@ -43,6 +57,35 @@ void kernel_main(void) {
     vga_puts("Serial COM1: ");
     vga_puthex(SERIAL_COM1);
     vga_puts("\n\n");
+
+    /* Test IDE disk I/O */
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    vga_puts("Testing IDE Disk...\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    uint16_t buffer[256];  /* 512-byte sector */
+
+    /* Try to read sector 0 */
+    vga_puts("Reading sector 0: ");
+    if (ide_read_sectors(0, 0, 1, buffer) == 0) {
+        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        vga_puts("OK\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+        /* Show first few bytes */
+        vga_puts("First 4 words: ");
+        for (int i = 0; i < 4; i++) {
+            vga_puthex(buffer[i]);
+            vga_puts(" ");
+        }
+        vga_puts("\n");
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        vga_puts("FAILED\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    vga_puts("\n");
 
     vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
     vga_puts("System ready. Type in terminal for serial echo!\n");
