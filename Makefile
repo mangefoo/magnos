@@ -16,6 +16,7 @@ KERNEL_ELF = kernel.elf
 KERNEL_BIN = kernel.bin
 OS_IMG = magnos.img
 HDD_IMG = hdd.img
+HELLO_BIN = userspace/hello
 
 # Object files
 KERNEL_ENTRY_OBJ = kernel_entry.o
@@ -24,8 +25,10 @@ VGA_OBJ = vga.o
 SERIAL_OBJ = serial.o
 IDE_OBJ = ide.o
 FAT32_OBJ = fat32.o
+ELF_OBJ = elf.o
+SYSCALL_OBJ = syscall.o
 
-OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ)
+OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ)
 
 # Default target
 all: $(OS_IMG)
@@ -39,7 +42,7 @@ $(KERNEL_ENTRY_OBJ): kernel_entry.asm
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Build kernel objects
-$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h
+$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h elf.h syscall.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(VGA_OBJ): vga.c vga.h
@@ -52,6 +55,12 @@ $(IDE_OBJ): ide.c ide.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(FAT32_OBJ): fat32.c fat32.h ide.h vga.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(ELF_OBJ): elf.c elf.h vga.h syscall.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(SYSCALL_OBJ): syscall.c syscall.h vga.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link kernel to ELF
@@ -71,13 +80,22 @@ $(OS_IMG): $(BOOT_BIN) $(KERNEL_BIN)
 		dd if=/dev/zero bs=1 count=$$((1474560 - $$SIZE)) >> $@; \
 	fi
 
+# Build userspace hello program
+$(HELLO_BIN): userspace/hello.c userspace/crt0.c userspace/libmagnos.h
+	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
+		-o $@ userspace/crt0.c userspace/hello.c
+
 # Create hard disk image (10MB) formatted as FAT32
-$(HDD_IMG):
+$(HDD_IMG): $(HELLO_BIN)
 	dd if=/dev/zero of=$@ bs=1M count=10
 	mkfs.fat -F 32 $@
 	@echo "Created 10MB FAT32 disk image"
 	@if [ -f hello.txt ]; then \
 		mcopy -i $@ hello.txt ::HELLO.TXT && echo "Added hello.txt to disk"; \
+	fi
+	@if [ -f $(HELLO_BIN) ]; then \
+		mcopy -i $@ $(HELLO_BIN) ::HELLO && echo "Added hello binary to disk"; \
 	fi
 
 # Run in QEMU (no hard disk)
@@ -103,6 +121,6 @@ debug: $(OS_IMG)
 
 # Clean build artifacts
 clean:
-	rm -f *.o *.bin *.elf *.img serial.log
+	rm -f *.o *.bin *.elf *.img serial.log userspace/hello userspace/*.o
 
 .PHONY: all run run-hdd run-serial-file run-monitor debug clean

@@ -1,0 +1,16 @@
+#ifndef SYSCALL_H
+#define SYSCALL_H
+
+#include <stdint.h>
+
+/* Syscall numbers */
+#define SYSCALL_PRINT   1
+#define SYSCALL_EXIT    2
+
+/* Syscall handler */
+void syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_t arg3);
+
+/* Initialize syscalls */
+void syscall_init(void);
+
+#endif /* SYSCALL_H */

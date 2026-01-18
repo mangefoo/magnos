@@ -2,6 +2,8 @@
 #include "serial.h"
 #include "ide.h"
 #include "fat32.h"
+#include "elf.h"
+#include "syscall.h"
 
 /* Kernel main function */
 void kernel_main(void) {
@@ -111,6 +113,62 @@ void kernel_main(void) {
         } else {
             vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
             vga_puts("File not found\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+
+        vga_puts("\n");
+
+        /* Try to load and execute HELLO binary */
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        vga_puts("Loading HELLO binary...\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+        file = fat32_open("HELLO");
+        if (file) {
+            vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+            vga_puts("Binary found! Size: ");
+            vga_puthex(file->size);
+            vga_puts(" bytes\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+            /* Allocate buffer for binary (max 64KB) */
+            static uint8_t binary_buffer[65536];
+
+            if (file->size > sizeof(binary_buffer)) {
+                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                vga_puts("Binary too large!\n");
+                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+            } else {
+                /* Read entire binary */
+                int bytes_read = fat32_read(file, binary_buffer, file->size);
+
+                if (bytes_read > 0) {
+                    vga_puts("Binary loaded. ");
+
+                    /* Initialize syscalls */
+                    syscall_init();
+
+                    /* Load and execute ELF binary */
+                    if (elf_load_and_exec(binary_buffer, bytes_read) == 0) {
+                        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+                        vga_puts("\nBinary execution successful!\n");
+                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                    } else {
+                        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                        vga_puts("Failed to execute binary\n");
+                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                    }
+                } else {
+                    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                    vga_puts("Failed to read binary\n");
+                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                }
+            }
+
+            fat32_close(file);
+        } else {
+            vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+            vga_puts("Binary not found (add HELLO file to disk)\n");
             vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
         }
 
