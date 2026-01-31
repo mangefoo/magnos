@@ -5,6 +5,7 @@
 #include "elf.h"
 #include "syscall.h"
 #include "keyboard.h"
+#include "args.h"
 
 /* Feature flags */
 #define PRINT_HELLO_TXT      0
@@ -17,11 +18,16 @@ static uint8_t binary_buffer[65536];
 
 /* Execute a command by loading and running a binary from the filesystem */
 static void execute_command(const char *cmd) {
-    /* Convert to uppercase for FAT32 8.3 filename */
+    char program_name[64];
+
+    /* Parse command line into program and arguments */
+    parse_command_line(cmd, program_name, &current_program_args);
+
+    /* Convert program name to uppercase for FAT32 8.3 filename */
     char filename[12];
     int i;
-    for (i = 0; cmd[i] && i < 11; i++) {
-        char ch = cmd[i];
+    for (i = 0; program_name[i] && i < 11; i++) {
+        char ch = program_name[i];
         if (ch >= 'a' && ch <= 'z') {
             filename[i] = ch - 32;
         } else {

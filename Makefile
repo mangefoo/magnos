@@ -20,6 +20,7 @@ HELLO_BIN = userspace/hello
 PRINT_BIN = userspace/print
 FILETEST_BIN = userspace/filetest
 LS_BIN = userspace/ls
+CAT_BIN = userspace/cat
 
 # Object files
 KERNEL_ENTRY_OBJ = kernel_entry.o
@@ -31,8 +32,9 @@ FAT32_OBJ = fat32.o
 ELF_OBJ = elf.o
 SYSCALL_OBJ = syscall.o
 KEYBOARD_OBJ = keyboard.o
+ARGS_OBJ = args.o
 
-OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ) $(KEYBOARD_OBJ)
+OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ) $(KEYBOARD_OBJ) $(ARGS_OBJ)
 
 # Default target
 all: $(OS_IMG)
@@ -46,7 +48,10 @@ $(KERNEL_ENTRY_OBJ): kernel_entry.asm
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Build kernel objects
-$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h elf.h syscall.h keyboard.h
+$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h elf.h syscall.h keyboard.h args.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(ARGS_OBJ): args.c args.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(VGA_OBJ): vga.c vga.h
@@ -64,7 +69,7 @@ $(FAT32_OBJ): fat32.c fat32.h ide.h vga.h
 $(ELF_OBJ): elf.c elf.h vga.h syscall.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(SYSCALL_OBJ): syscall.c syscall.h vga.h elf.h fat32.h serial.h
+$(SYSCALL_OBJ): syscall.c syscall.h vga.h elf.h fat32.h serial.h args.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(KEYBOARD_OBJ): keyboard.c keyboard.h
@@ -111,8 +116,14 @@ $(LS_BIN): userspace/ls.c userspace/crt0.c userspace/libmagnos.h
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/ls.c
 
+# Build userspace cat program
+$(CAT_BIN): userspace/cat.c userspace/crt0.c userspace/libmagnos.h
+	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
+		-o $@ userspace/crt0.c userspace/cat.c
+
 # Create hard disk image (10MB) formatted as FAT32
-$(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(FILETEST_BIN) $(LS_BIN)
+$(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(FILETEST_BIN) $(LS_BIN) $(CAT_BIN)
 	dd if=/dev/zero of=$@ bs=1M count=10
 	mkfs.fat -F 32 $@
 	@echo "Created 10MB FAT32 disk image"
@@ -130,6 +141,9 @@ $(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(FILETEST_BIN) $(LS_BIN)
 	fi
 	@if [ -f $(LS_BIN) ]; then \
 		mcopy -i $@ $(LS_BIN) ::LS && echo "Added ls binary to disk"; \
+	fi
+	@if [ -f $(CAT_BIN) ]; then \
+		mcopy -i $@ $(CAT_BIN) ::CAT && echo "Added cat binary to disk"; \
 	fi
 
 # Run in QEMU (no hard disk)
@@ -155,6 +169,6 @@ debug: $(OS_IMG)
 
 # Clean build artifacts
 clean:
-	rm -f *.o *.bin *.elf *.img serial.log userspace/hello userspace/print userspace/filetest userspace/ls userspace/*.o
+	rm -f *.o *.bin *.elf *.img serial.log userspace/hello userspace/print userspace/filetest userspace/ls userspace/cat userspace/*.o
 
 .PHONY: all run run-hdd run-serial-file run-monitor debug clean

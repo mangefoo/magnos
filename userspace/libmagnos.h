@@ -8,6 +8,7 @@
 #define SYSCALL_FILE_READ  4
 #define SYSCALL_FILE_CLOSE 5
 #define SYSCALL_LIST_DIR   6
+#define SYSCALL_GET_ARGS   7
 
 /* Directory entry structure (must match kernel definition) */
 typedef struct {
@@ -69,6 +70,24 @@ static inline int list_dir(dirinfo_t *entries, unsigned int max_entries) {
     unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
     if (handler) {
         return (int)handler(SYSCALL_LIST_DIR, (unsigned int)entries, max_entries, 0);
+    }
+    return -1;
+}
+
+/* Get argument count */
+static inline int get_argc(void) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (int)handler(SYSCALL_GET_ARGS, (unsigned int)-1, 0, 0);
+    }
+    return 0;
+}
+
+/* Get argument by index (returns 0 on success, -1 on error) */
+static inline int get_arg(int index, char *buffer, unsigned int buf_size) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (int)handler(SYSCALL_GET_ARGS, (unsigned int)index, (unsigned int)buffer, buf_size);
     }
     return -1;
 }

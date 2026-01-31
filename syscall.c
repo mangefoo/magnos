@@ -3,6 +3,7 @@
 #include "elf.h"
 #include "fat32.h"
 #include "serial.h"
+#include "args.h"
 
 /* Memory functions */
 static uint32_t strlen(const char *str) {
@@ -105,6 +106,36 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
             }
 
             return (uint32_t)count;
+        }
+
+        case SYSCALL_GET_ARGS: {
+            /* arg1 = argument index, arg2 = buffer pointer, arg3 = buffer size */
+            int arg_idx = (int)arg1;
+            char *buffer = (char *)arg2;
+            uint32_t buf_size = arg3;
+
+            /* If arg_idx == -1, return argument count */
+            if (arg_idx == -1) {
+                return (uint32_t)current_program_args.count;
+            }
+
+            if (!buffer || buf_size == 0) {
+                return (uint32_t)-1;
+            }
+
+            /* Check if index is valid */
+            if (arg_idx < 0 || arg_idx >= current_program_args.count) {
+                return (uint32_t)-1;
+            }
+
+            /* Copy argument to buffer */
+            uint32_t i;
+            for (i = 0; i < buf_size - 1 && current_program_args.args[arg_idx][i]; i++) {
+                buffer[i] = current_program_args.args[arg_idx][i];
+            }
+            buffer[i] = '\0';
+
+            return 0;
         }
 
         default:
