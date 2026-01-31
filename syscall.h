@@ -11,6 +11,8 @@
 #define SYSCALL_FILE_CLOSE 5
 #define SYSCALL_LIST_DIR   6
 #define SYSCALL_GET_ARGS   7
+#define SYSCALL_GETCHAR    8
+#define SYSCALL_EXEC       9
 
 /* Syscall handler */
 uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_t arg3);

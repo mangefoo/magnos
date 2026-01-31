@@ -9,6 +9,8 @@
 #define SYSCALL_FILE_CLOSE 5
 #define SYSCALL_LIST_DIR   6
 #define SYSCALL_GET_ARGS   7
+#define SYSCALL_GETCHAR    8
+#define SYSCALL_EXEC       9
 
 /* Directory entry structure (must match kernel definition) */
 typedef struct {
@@ -88,6 +90,24 @@ static inline int get_arg(int index, char *buffer, unsigned int buf_size) {
     unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
     if (handler) {
         return (int)handler(SYSCALL_GET_ARGS, (unsigned int)index, (unsigned int)buffer, buf_size);
+    }
+    return -1;
+}
+
+/* Get a character from keyboard or serial (blocking) */
+static inline char getchar(void) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (char)handler(SYSCALL_GETCHAR, 0, 0, 0);
+    }
+    return 0;
+}
+
+/* Execute a program with arguments (returns 0 on success, negative on error) */
+static inline int exec(const char *cmdline) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (int)handler(SYSCALL_EXEC, (unsigned int)cmdline, 0, 0);
     }
     return -1;
 }

@@ -11,10 +11,12 @@
 #define PRINT_HELLO_TXT      0
 #define ENABLE_HELLO_BINARY  0
 
-/* Command shell buffers (global to avoid stack issues) */
-static char cmd_buf[64];
-static int cmd_pos = 0;
+/* Binary buffer for loading programs (global to avoid stack issues) */
 static uint8_t binary_buffer[65536];
+
+/* Shell command buffer */
+static char shell_cmd_buf[64];
+static int shell_cmd_pos = 0;
 
 /* Execute a command by loading and running a binary from the filesystem */
 static void execute_command(const char *cmd) {
@@ -52,39 +54,34 @@ static void execute_command(const char *cmd) {
 
                     syscall_init();
                     if (elf_load_and_exec(binary_buffer, bytes_read) != 0) {
-                        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
                         vga_puts("Failed to execute binary\n");
                         serial_puts(SERIAL_COM1, "Failed to execute binary\r\n");
-                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
                     }
                 } else {
-                    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
                     vga_puts("Not an ELF binary\n");
                     serial_puts(SERIAL_COM1, "Not an ELF binary\r\n");
-                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
                 }
             } else {
-                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
                 vga_puts("Failed to read file\n");
                 serial_puts(SERIAL_COM1, "Failed to read file\r\n");
-                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
             }
         } else {
             fat32_close(file);
-            vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
             vga_puts("File too large\n");
             serial_puts(SERIAL_COM1, "File too large\r\n");
-            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
         }
     } else {
-        vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
         vga_puts("Command not found: ");
         vga_puts(filename);
         vga_putchar('\n');
         serial_puts(SERIAL_COM1, "Command not found: ");
         serial_puts(SERIAL_COM1, filename);
         serial_puts(SERIAL_COM1, "\r\n");
-        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     }
 }
 
@@ -272,14 +269,16 @@ void kernel_main(void) {
     }
 
     vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    vga_puts("System ready. Type a command or program name!\n");
+    vga_puts("System ready. Shell started.\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
     /* Show prompt */
-    cmd_pos = 0;
+    shell_cmd_pos = 0;
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
     vga_puts("\nMagnOS> ");
     serial_puts(SERIAL_COM1, "\nMagnOS> ");
 
+    /* Shell loop - never returns */
     while (1) {
         char c = 0;
 
@@ -295,27 +294,32 @@ void kernel_main(void) {
         if (c == 0) continue;
 
         if (c == '\b') {
-            if (cmd_pos > 0) {
-                cmd_pos--;
+            /* Backspace - remove character from buffer */
+            if (shell_cmd_pos > 0) {
+                shell_cmd_pos--;
                 vga_puts("\b \b");
                 serial_putchar(SERIAL_COM1, '\b');
                 serial_putchar(SERIAL_COM1, ' ');
                 serial_putchar(SERIAL_COM1, '\b');
             }
         } else if (c == '\n') {
+            /* Enter - execute command */
             vga_putchar('\n');
             serial_puts(SERIAL_COM1, "\r\n");
 
-            cmd_buf[cmd_pos] = '\0';
-            if (cmd_pos > 0) {
-                execute_command(cmd_buf);
+            shell_cmd_buf[shell_cmd_pos] = '\0';
+            if (shell_cmd_pos > 0) {
+                /* Execute the command - splits on spaces automatically */
+                execute_command(shell_cmd_buf);
             }
 
-            cmd_pos = 0;
+            shell_cmd_pos = 0;
+            vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
             vga_puts("MagnOS> ");
             serial_puts(SERIAL_COM1, "MagnOS> ");
-        } else if (cmd_pos < (int)sizeof(cmd_buf) - 1) {
-            cmd_buf[cmd_pos++] = c;
+        } else if (shell_cmd_pos < (int)sizeof(shell_cmd_buf) - 1) {
+            /* Regular character - add to buffer */
+            shell_cmd_buf[shell_cmd_pos++] = c;
             vga_putchar(c);
             serial_putchar(SERIAL_COM1, c);
         }
