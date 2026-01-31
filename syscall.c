@@ -1,6 +1,8 @@
 #include "syscall.h"
 #include "vga.h"
 #include "elf.h"
+#include "fat32.h"
+#include "serial.h"
 
 /* Memory functions */
 static uint32_t strlen(const char *str) {
@@ -9,9 +11,11 @@ static uint32_t strlen(const char *str) {
     return len;
 }
 
+/* Currently open file (only one file at a time) */
+static fat32_file_t *current_file = NULL;
+
 /* Syscall handler */
-void syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
-    (void)arg2;  /* Unused */
+uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
     (void)arg3;  /* Unused */
 
     switch (syscall_num) {
@@ -20,8 +24,9 @@ void syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_
             const char *str = (const char *)arg1;
             if (str) {
                 vga_puts(str);
+                serial_puts(SERIAL_COM1, str);
             }
-            break;
+            return 0;
         }
 
         case SYSCALL_EXIT: {
@@ -31,12 +36,62 @@ void syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_
             vga_puts("]\n");
             /* Return control to kernel */
             elf_return_to_kernel();
-            break;
+            return 0;
+        }
+
+        case SYSCALL_FILE_OPEN: {
+            /* arg1 = pointer to filename */
+            const char *filename = (const char *)arg1;
+            if (!filename) {
+                return (uint32_t)-1;
+            }
+
+            /* Close any previously open file */
+            if (current_file) {
+                fat32_close(current_file);
+                current_file = NULL;
+            }
+
+            /* Open the file */
+            current_file = fat32_open(filename);
+            if (!current_file) {
+                return (uint32_t)-1;
+            }
+
+            return 0;
+        }
+
+        case SYSCALL_FILE_READ: {
+            /* arg1 = buffer pointer, arg2 = size */
+            uint8_t *buffer = (uint8_t *)arg1;
+            uint32_t size = arg2;
+
+            if (!buffer || !current_file) {
+                return (uint32_t)-1;
+            }
+
+            /* Read from file */
+            int bytes_read = fat32_read(current_file, buffer, size);
+            if (bytes_read < 0) {
+                return (uint32_t)-1;
+            }
+
+            return (uint32_t)bytes_read;
+        }
+
+        case SYSCALL_FILE_CLOSE: {
+            if (!current_file) {
+                return (uint32_t)-1;
+            }
+
+            fat32_close(current_file);
+            current_file = NULL;
+            return 0;
         }
 
         default:
             vga_puts("[Unknown syscall]\n");
-            break;
+            return (uint32_t)-1;
     }
 }
 

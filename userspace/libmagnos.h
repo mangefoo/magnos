@@ -2,27 +2,58 @@
 #define LIBMAGNOS_H
 
 /* Syscall numbers */
-#define SYSCALL_PRINT   1
-#define SYSCALL_EXIT    2
+#define SYSCALL_PRINT      1
+#define SYSCALL_EXIT       2
+#define SYSCALL_FILE_OPEN  3
+#define SYSCALL_FILE_READ  4
+#define SYSCALL_FILE_CLOSE 5
 
 /* Syscall handler function pointer (set by kernel at 0x00100000) */
 #define __syscall_handler \
-    (*(void (**)(unsigned int, unsigned int, unsigned int, unsigned int))0x00100000)
+    (*(unsigned int (**)(unsigned int, unsigned int, unsigned int, unsigned int))0x00100000)
 
 /* Print a string to the console */
-static inline void print(const char *str) {
-    void (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+static inline int print(const char *str) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
     if (handler) {
-        handler(SYSCALL_PRINT, (unsigned int)str, 0, 0);
+        return (int)handler(SYSCALL_PRINT, (unsigned int)str, 0, 0);
     }
+    return -1;
 }
 
 /* Exit the program */
 static inline void exit(int code) {
-    void (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
     if (handler) {
         handler(SYSCALL_EXIT, (unsigned int)code, 0, 0);
     }
+}
+
+/* Open a file by name */
+static inline int file_open(const char *filename) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (int)handler(SYSCALL_FILE_OPEN, (unsigned int)filename, 0, 0);
+    }
+    return -1;
+}
+
+/* Read from currently open file */
+static inline int file_read(unsigned char *buffer, unsigned int size) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (int)handler(SYSCALL_FILE_READ, (unsigned int)buffer, size, 0);
+    }
+    return -1;
+}
+
+/* Close currently open file */
+static inline int file_close(void) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (int)handler(SYSCALL_FILE_CLOSE, 0, 0, 0);
+    }
+    return -1;
 }
 
 #endif /* LIBMAGNOS_H */
