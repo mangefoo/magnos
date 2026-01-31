@@ -93,6 +93,13 @@ typedef struct {
     uint8_t valid;
 } fat32_file_t;
 
+/* Directory entry info for userspace */
+typedef struct {
+    char name[13];        /* Filename in readable format */
+    uint32_t size;        /* File size in bytes */
+    uint8_t is_directory; /* 1 if directory, 0 if file */
+} fat32_dirinfo_t;
+
 /* Initialize FAT32 filesystem */
 int fat32_init(uint8_t drive);
 
@@ -110,5 +117,8 @@ void fat32_close(fat32_file_t *file);
 
 /* Get filesystem info */
 void fat32_get_info(uint32_t *total_sectors, uint32_t *free_clusters);
+
+/* Get directory listing */
+int fat32_list_dir(fat32_dirinfo_t *entries, int max_entries);
 
 #endif /* FAT32_H */

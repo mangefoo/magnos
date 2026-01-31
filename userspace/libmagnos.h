@@ -7,6 +7,14 @@
 #define SYSCALL_FILE_OPEN  3
 #define SYSCALL_FILE_READ  4
 #define SYSCALL_FILE_CLOSE 5
+#define SYSCALL_LIST_DIR   6
+
+/* Directory entry structure (must match kernel definition) */
+typedef struct {
+    char name[13];
+    unsigned int size;
+    unsigned char is_directory;
+} dirinfo_t;
 
 /* Syscall handler function pointer (set by kernel at 0x00100000) */
 #define __syscall_handler \
@@ -52,6 +60,15 @@ static inline int file_close(void) {
     unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
     if (handler) {
         return (int)handler(SYSCALL_FILE_CLOSE, 0, 0, 0);
+    }
+    return -1;
+}
+
+/* List directory contents */
+static inline int list_dir(dirinfo_t *entries, unsigned int max_entries) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return (int)handler(SYSCALL_LIST_DIR, (unsigned int)entries, max_entries, 0);
     }
     return -1;
 }

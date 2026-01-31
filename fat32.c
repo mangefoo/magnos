@@ -256,6 +256,66 @@ int fat32_list_root(void) {
     return file_count;
 }
 
+/* Get directory listing */
+int fat32_list_dir(fat32_dirinfo_t *entries, int max_entries) {
+    if (!fs.initialized || !entries || max_entries <= 0) {
+        return -1;
+    }
+
+    uint32_t cluster = fs.root_dir_cluster;
+    int entry_count = 0;
+
+    while (cluster < FAT32_CLUSTER_EOC && entry_count < max_entries) {
+        uint32_t sector = fat32_cluster_to_sector(cluster);
+
+        /* Read all sectors in this cluster */
+        for (uint32_t i = 0; i < fs.bpb.sectors_per_cluster; i++) {
+            if (ide_read_sectors(fs.drive, sector + i, 1, sector_buffer) != 0) {
+                return -1;
+            }
+
+            fat32_direntry_t *dir_entries = (fat32_direntry_t *)sector_buffer;
+
+            /* Process all directory entries in this sector */
+            for (int j = 0; j < 16 && entry_count < max_entries; j++) {
+                fat32_direntry_t *entry = &dir_entries[j];
+
+                /* End of directory */
+                if (entry->name[0] == 0x00) {
+                    return entry_count;
+                }
+
+                /* Skip deleted entries */
+                if (entry->name[0] == 0xE5) {
+                    continue;
+                }
+
+                /* Skip long name entries */
+                if (entry->attr == FAT32_ATTR_LONG_NAME) {
+                    continue;
+                }
+
+                /* Skip volume label */
+                if (entry->attr & FAT32_ATTR_VOLUME_ID) {
+                    continue;
+                }
+
+                /* Fill in entry info */
+                fat32_name_to_string(entry->name, entries[entry_count].name);
+                entries[entry_count].size = entry->file_size;
+                entries[entry_count].is_directory = (entry->attr & FAT32_ATTR_DIRECTORY) ? 1 : 0;
+
+                entry_count++;
+            }
+        }
+
+        /* Get next cluster */
+        cluster = fat32_get_next_cluster(cluster);
+    }
+
+    return entry_count;
+}
+
 /* Open a file */
 fat32_file_t* fat32_open(const char *filename) {
     static fat32_file_t file;

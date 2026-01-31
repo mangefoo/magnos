@@ -19,6 +19,7 @@ HDD_IMG = hdd.img
 HELLO_BIN = userspace/hello
 PRINT_BIN = userspace/print
 FILETEST_BIN = userspace/filetest
+LS_BIN = userspace/ls
 
 # Object files
 KERNEL_ENTRY_OBJ = kernel_entry.o
@@ -104,8 +105,14 @@ $(FILETEST_BIN): userspace/filetest.c userspace/crt0.c userspace/libmagnos.h
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/filetest.c
 
+# Build userspace ls program
+$(LS_BIN): userspace/ls.c userspace/crt0.c userspace/libmagnos.h
+	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
+		-o $@ userspace/crt0.c userspace/ls.c
+
 # Create hard disk image (10MB) formatted as FAT32
-$(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(FILETEST_BIN)
+$(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(FILETEST_BIN) $(LS_BIN)
 	dd if=/dev/zero of=$@ bs=1M count=10
 	mkfs.fat -F 32 $@
 	@echo "Created 10MB FAT32 disk image"
@@ -120,6 +127,9 @@ $(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(FILETEST_BIN)
 	fi
 	@if [ -f $(FILETEST_BIN) ]; then \
 		mcopy -i $@ $(FILETEST_BIN) ::FILETEST && echo "Added filetest binary to disk"; \
+	fi
+	@if [ -f $(LS_BIN) ]; then \
+		mcopy -i $@ $(LS_BIN) ::LS && echo "Added ls binary to disk"; \
 	fi
 
 # Run in QEMU (no hard disk)
@@ -145,6 +155,6 @@ debug: $(OS_IMG)
 
 # Clean build artifacts
 clean:
-	rm -f *.o *.bin *.elf *.img serial.log userspace/hello userspace/print userspace/filetest userspace/*.o
+	rm -f *.o *.bin *.elf *.img serial.log userspace/hello userspace/print userspace/filetest userspace/ls userspace/*.o
 
 .PHONY: all run run-hdd run-serial-file run-monitor debug clean

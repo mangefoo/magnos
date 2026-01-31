@@ -89,6 +89,24 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
             return 0;
         }
 
+        case SYSCALL_LIST_DIR: {
+            /* arg1 = buffer pointer, arg2 = max entries */
+            fat32_dirinfo_t *buffer = (fat32_dirinfo_t *)arg1;
+            uint32_t max_entries = arg2;
+
+            if (!buffer || max_entries == 0) {
+                return (uint32_t)-1;
+            }
+
+            /* Get directory listing */
+            int count = fat32_list_dir(buffer, (int)max_entries);
+            if (count < 0) {
+                return (uint32_t)-1;
+            }
+
+            return (uint32_t)count;
+        }
+
         default:
             vga_puts("[Unknown syscall]\n");
             return (uint32_t)-1;
