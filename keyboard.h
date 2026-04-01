@@ -53,13 +53,10 @@
 /* Initialize keyboard */
 void keyboard_init(void);
 
-/* Check if a key is available */
-int keyboard_has_key(void);
+/* IRQ1 handler — called from ISR dispatcher */
+void keyboard_irq_handler(void);
 
-/* Get raw scancode (non-blocking, returns 0 if no key) */
-uint8_t keyboard_get_scancode(void);
-
-/* Get ASCII character (non-blocking, returns 0 if no key or non-printable) */
+/* Get ASCII character from ring buffer (non-blocking, returns 0 if empty) */
 char keyboard_getchar(void);
 
 /* Check if shift is pressed */

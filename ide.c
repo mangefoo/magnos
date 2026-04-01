@@ -1,23 +1,5 @@
 #include "ide.h"
-
-/* Port I/O functions */
-static inline void outb(uint16_t port, uint8_t val) {
-    __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port) {
-    uint8_t ret;
-    __asm__ volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
-
-static inline void inw_buffer(uint16_t port, uint16_t *buffer, uint32_t count) {
-    __asm__ volatile ("cld; rep insw" : "+D"(buffer), "+c"(count) : "d"(port) : "memory");
-}
-
-static inline void outw_buffer(uint16_t port, uint16_t *buffer, uint32_t count) {
-    __asm__ volatile ("cld; rep outsw" : "+S"(buffer), "+c"(count) : "d"(port) : "memory");
-}
+#include "io.h"
 
 /* Wait for IDE controller to be ready */
 static int ide_wait_ready(void) {

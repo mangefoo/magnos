@@ -6,6 +6,7 @@
 #include "syscall.h"
 #include "keyboard.h"
 #include "args.h"
+#include "idt.h"
 
 /* Feature flags */
 #define PRINT_HELLO_TXT      0
@@ -87,9 +88,6 @@ static void execute_command(const char *cmd) {
 
 /* Kernel main function */
 void kernel_main(void) {
-    /* Ensure interrupts are disabled (no IDT yet) */
-    __asm__ volatile("cli");
-
     /* Initialize VGA */
     vga_init();
 
@@ -109,6 +107,10 @@ void kernel_main(void) {
     /* Initialize keyboard */
     keyboard_init();
     vga_puts("Keyboard Driver: OK\n");
+
+    /* Initialize IDT and enable interrupts */
+    idt_init();
+    vga_puts("IDT/Interrupts: OK\n");
 
     /* Initialize IDE */
     vga_puts("IDE Driver: ");

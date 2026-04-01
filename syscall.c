@@ -168,6 +168,7 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
                 if (c != 0) {
                     return (uint32_t)(unsigned char)c;
                 }
+                __asm__ volatile("hlt");
             }
         }
 

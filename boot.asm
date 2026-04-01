@@ -49,33 +49,47 @@ print_string:
     ret
 
 ; Load kernel from disk
+; Floppy: 18 sectors/track, 2 heads. Boot sector is track 0, head 0, sector 1.
+; Kernel starts at sector 2. First read: sectors 2-18 (17 sectors) from head 0.
+; Second read: sectors 1-18 (18 sectors) from head 1.
+; Third read: sectors 1-18 (18 sectors) from cylinder 1, head 0.
+; Total: 17 + 18 + 18 = 53 sectors = 27136 bytes (enough for kernel)
 load_kernel:
     pusha
-    mov bx, KERNEL_OFFSET   ; Destination
-    mov dh, 30              ; Load 30 sectors (15KB, enough for kernel)
-    mov dl, [BOOT_DRIVE]    ; Boot drive from BIOS
-    call disk_load
-    popa
-    ret
+    mov dl, [BOOT_DRIVE]
 
-; Disk load function
-; DH = number of sectors, DL = drive, BX = destination
-disk_load:
-    pusha
-    push dx
+    ; Read 1: 17 sectors from CHS 0/0/2
+    mov bx, KERNEL_OFFSET
+    mov ah, 0x02
+    mov al, 17             ; 17 sectors (2 through 18)
+    mov ch, 0              ; cylinder 0
+    mov cl, 2              ; start at sector 2
+    mov dh, 0              ; head 0
+    int 0x13
+    jc disk_error
 
-    mov ah, 0x02            ; Read sectors function
-    mov al, dh              ; Number of sectors to read
-    mov ch, 0x00            ; Cylinder 0
-    mov dh, 0x00            ; Head 0
-    mov cl, 0x02            ; Start from sector 2 (after boot sector)
+    ; Read 2: 18 sectors from CHS 0/1/1
+    add bx, 17 * 512
+    mov ah, 0x02
+    mov al, 18
+    mov ch, 0              ; cylinder 0
+    mov cl, 1              ; sector 1
+    mov dh, 1              ; head 1
+    mov dl, [BOOT_DRIVE]
+    int 0x13
+    jc disk_error
 
-    int 0x13                ; BIOS disk interrupt
-    jc disk_error           ; Jump if error (carry flag set)
+    ; Read 3: 18 sectors from CHS 1/0/1
+    add bx, 18 * 512
+    mov ah, 0x02
+    mov al, 18
+    mov ch, 1              ; cylinder 1
+    mov cl, 1              ; sector 1
+    mov dh, 0              ; head 0
+    mov dl, [BOOT_DRIVE]
+    int 0x13
+    jc disk_error
 
-    pop dx
-    cmp al, dh              ; Check if all sectors read
-    jne disk_error
     popa
     ret
 

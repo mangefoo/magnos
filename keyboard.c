@@ -1,21 +1,17 @@
 #include "keyboard.h"
-
-/* Port I/O functions */
-static inline void outb(uint16_t port, uint8_t val) {
-    __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port) {
-    uint8_t ret;
-    __asm__ volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
+#include "io.h"
 
 /* Modifier key states */
 static uint8_t shift_pressed = 0;
 static uint8_t ctrl_pressed = 0;
 static uint8_t alt_pressed = 0;
 static uint8_t capslock_on = 0;
+
+/* Ring buffer for interrupt-driven keyboard input */
+#define KB_BUFFER_SIZE 256
+static volatile char kb_buffer[KB_BUFFER_SIZE];
+static volatile int kb_head = 0;
+static volatile int kb_tail = 0;
 
 /* US keyboard layout - scancode to ASCII (lowercase) */
 static const char scancode_to_ascii[] = {
@@ -47,91 +43,9 @@ static const char scancode_to_ascii_shift[] = {
     '2', '3', '0', '.',  0,   0,   0,   0,     /* 0x50 - 0x57 */
 };
 
-/* PIC ports */
-#define PIC1_DATA  0x21
-#define PIC2_DATA  0xA1
-
-/* Initialize keyboard */
-void keyboard_init(void) {
-    int timeout;
-
-    /* Mask all IRQs on both PICs to prevent interrupts without IDT */
-    outb(PIC1_DATA, 0xFF);
-    outb(PIC2_DATA, 0xFF);
-
-    /* Wait for keyboard controller to be ready (with timeout) */
-    timeout = 10000;
-    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
-        timeout--;
-    }
-
-    /* Read current controller configuration */
-    outb(KB_CMD_PORT, 0x20);
-    timeout = 10000;
-    while (!(inb(KB_STATUS_PORT) & KB_STATUS_OUTPUT_FULL) && timeout > 0) {
-        timeout--;
-    }
-    uint8_t config = inb(KB_DATA_PORT);
-
-    /* Disable keyboard interrupt (bit 0) but keep keyboard enabled */
-    config &= ~0x01;
-
-    /* Write back configuration */
-    timeout = 10000;
-    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
-        timeout--;
-    }
-    outb(KB_CMD_PORT, 0x60);
-    timeout = 10000;
-    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
-        timeout--;
-    }
-    outb(KB_DATA_PORT, config);
-
-    /* Enable keyboard interface */
-    timeout = 10000;
-    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
-        timeout--;
-    }
-    outb(KB_CMD_PORT, 0xAE);
-
-    /* Small delay */
-    for (volatile int i = 0; i < 10000; i++);
-
-    /* Clear any pending data (with timeout) */
-    timeout = 100;
-    while ((inb(KB_STATUS_PORT) & KB_STATUS_OUTPUT_FULL) && timeout > 0) {
-        inb(KB_DATA_PORT);
-        timeout--;
-    }
-
-    shift_pressed = 0;
-    ctrl_pressed = 0;
-    alt_pressed = 0;
-    capslock_on = 0;
-}
-
-/* Check if a key is available */
-int keyboard_has_key(void) {
-    return (inb(KB_STATUS_PORT) & KB_STATUS_OUTPUT_FULL) != 0;
-}
-
-/* Get raw scancode (non-blocking) */
-uint8_t keyboard_get_scancode(void) {
-    if (!keyboard_has_key()) {
-        return 0;
-    }
-    return inb(KB_DATA_PORT);
-}
-
-/* Get ASCII character (non-blocking) */
-char keyboard_getchar(void) {
-    uint8_t scancode = keyboard_get_scancode();
-
-    if (scancode == 0) {
-        return 0;
-    }
-
+/* Translate a scancode to ASCII, updating modifier state.
+ * Returns 0 for modifier keys and key releases. */
+static char translate_scancode(uint8_t scancode) {
     /* Handle key release */
     if (scancode & KEY_RELEASE) {
         uint8_t released = scancode & ~KEY_RELEASE;
@@ -169,35 +83,114 @@ char keyboard_getchar(void) {
         case KEY_BACKSPACE:
             return '\b';
         case KEY_ESCAPE:
-            return 27;  /* ESC character */
+            return 27;
     }
 
     /* Convert scancode to ASCII */
     if (scancode < sizeof(scancode_to_ascii)) {
-        char c;
-
-        /* Determine if we should use shifted characters */
         int use_shift = shift_pressed;
 
-        /* For letters, capslock inverts the shift state */
-        if (scancode >= 0x10 && scancode <= 0x19) {  /* Q to P */
+        if (scancode >= 0x10 && scancode <= 0x19) {
             use_shift = shift_pressed ^ capslock_on;
-        } else if (scancode >= 0x1E && scancode <= 0x26) {  /* A to L */
+        } else if (scancode >= 0x1E && scancode <= 0x26) {
             use_shift = shift_pressed ^ capslock_on;
-        } else if (scancode >= 0x2C && scancode <= 0x32) {  /* Z to M */
+        } else if (scancode >= 0x2C && scancode <= 0x32) {
             use_shift = shift_pressed ^ capslock_on;
         }
 
         if (use_shift) {
-            c = scancode_to_ascii_shift[scancode];
+            return scancode_to_ascii_shift[scancode];
         } else {
-            c = scancode_to_ascii[scancode];
+            return scancode_to_ascii[scancode];
         }
-
-        return c;
     }
 
     return 0;
+}
+
+/* Initialize keyboard */
+void keyboard_init(void) {
+    int timeout;
+
+    /* Wait for keyboard controller to be ready (with timeout) */
+    timeout = 10000;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+
+    /* Read current controller configuration */
+    outb(KB_CMD_PORT, 0x20);
+    timeout = 10000;
+    while (!(inb(KB_STATUS_PORT) & KB_STATUS_OUTPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+    uint8_t config = inb(KB_DATA_PORT);
+
+    /* Enable keyboard interrupt (bit 0) */
+    config |= 0x01;
+
+    /* Write back configuration */
+    timeout = 10000;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+    outb(KB_CMD_PORT, 0x60);
+    timeout = 10000;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+    outb(KB_DATA_PORT, config);
+
+    /* Enable keyboard interface */
+    timeout = 10000;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_INPUT_FULL) && timeout > 0) {
+        timeout--;
+    }
+    outb(KB_CMD_PORT, 0xAE);
+
+    /* Small delay */
+    for (volatile int i = 0; i < 10000; i++);
+
+    /* Clear any pending data (with timeout) */
+    timeout = 100;
+    while ((inb(KB_STATUS_PORT) & KB_STATUS_OUTPUT_FULL) && timeout > 0) {
+        inb(KB_DATA_PORT);
+        timeout--;
+    }
+
+    shift_pressed = 0;
+    ctrl_pressed = 0;
+    alt_pressed = 0;
+    capslock_on = 0;
+    kb_head = 0;
+    kb_tail = 0;
+}
+
+/* IRQ1 handler — called from ISR dispatcher */
+void keyboard_irq_handler(void) {
+    uint8_t scancode = inb(KB_DATA_PORT);
+
+    char c = translate_scancode(scancode);
+
+    if (c != 0) {
+        int next_head = (kb_head + 1) % KB_BUFFER_SIZE;
+        if (next_head != kb_tail) {
+            kb_buffer[kb_head] = c;
+            kb_head = next_head;
+        }
+        /* If buffer full, drop the character */
+    }
+}
+
+/* Get ASCII character from ring buffer (non-blocking) */
+char keyboard_getchar(void) {
+    if (kb_tail == kb_head) {
+        return 0;
+    }
+
+    char c = kb_buffer[kb_tail];
+    kb_tail = (kb_tail + 1) % KB_BUFFER_SIZE;
+    return c;
 }
 
 /* Check if shift is pressed */

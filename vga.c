@@ -1,4 +1,5 @@
 #include "vga.h"
+#include "io.h"
 
 static uint16_t *vga_buffer;
 static size_t vga_row;
@@ -13,11 +14,6 @@ static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg) {
 /* Create VGA entry with character and color */
 static inline uint16_t vga_entry(unsigned char c, uint8_t color) {
     return (uint16_t)c | ((uint16_t)color << 8);
-}
-
-/* Port I/O */
-static inline void outb(uint16_t port, uint8_t val) {
-    __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
 }
 
 /* Update hardware cursor to match software position */
