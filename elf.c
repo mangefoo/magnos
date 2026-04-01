@@ -2,11 +2,18 @@
 #include "vga.h"
 #include "syscall.h"
 
-/* Saved context for returning from userspace */
-static uint32_t saved_esp;
-static uint32_t saved_ebp;
-static uint32_t saved_eip;
-static volatile int binary_exited;
+/* setjmp/longjmp context buffer */
+typedef struct {
+    uint32_t ebx, esi, edi, ebp, esp, eip;
+} exec_jmp_buf;
+
+extern int exec_setjmp(exec_jmp_buf *buf) __attribute__((returns_twice));
+extern void exec_longjmp(exec_jmp_buf *buf, int val) __attribute__((noreturn));
+
+/* Stack of saved contexts for nested exec */
+#define MAX_EXEC_DEPTH 8
+static exec_jmp_buf exec_stack[MAX_EXEC_DEPTH];
+static volatile int exec_depth = 0;
 
 /* Memory functions */
 static void* memcpy(void* dest, const void* src, uint32_t n) {
@@ -98,34 +105,32 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size) {
     vga_puthex(entry);
     vga_puts("\n");
 
-    /* Reset exit flag */
-    binary_exited = 0;
+    /* Check nesting depth */
+    if (exec_depth >= MAX_EXEC_DEPTH) {
+        vga_puts("exec: max nesting depth reached\n");
+        return -1;
+    }
 
-    /* Save current stack state */
-    __asm__ volatile(
-        "mov %%esp, %0\n"
-        "mov %%ebp, %1\n"
-        : "=m"(saved_esp), "=m"(saved_ebp)
-    );
+    /* Save context; returns 0 on save, 1 when restored by elf_return_to_kernel */
+    int depth = exec_depth++;
+    if (exec_setjmp(&exec_stack[depth]) != 0) {
+        /* Returned from program exit */
+        exec_depth--;
+        return 0;
+    }
 
     /* Create function pointer and call it */
     void (*entry_func)(void) = (void (*)(void))entry;
     entry_func();
 
-    /* We reach here either normally or after elf_return_to_kernel restores stack */
+    /* Program returned normally without calling exit */
+    exec_depth--;
     return 0;
 }
 
 /* Return from userspace to kernel (called by exit syscall) */
 void elf_return_to_kernel(void) {
-    /* Restore stack and return to elf_load_and_exec */
-    __asm__ volatile(
-        "mov %0, %%esp\n"
-        "mov %1, %%ebp\n"
-        "xor %%eax, %%eax\n"  /* Return 0 */
-        "leave\n"
-        "ret\n"
-        :
-        : "m"(saved_esp), "m"(saved_ebp)
-    );
+    if (exec_depth > 0) {
+        exec_longjmp(&exec_stack[exec_depth - 1], 1);
+    }
 }

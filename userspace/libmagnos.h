@@ -11,6 +11,7 @@
 #define SYSCALL_GET_ARGS   7
 #define SYSCALL_GETCHAR    8
 #define SYSCALL_EXEC       9
+#define SYSCALL_CLEAR      10
 
 /* Directory entry structure (must match kernel definition) */
 typedef struct {
@@ -101,6 +102,14 @@ static inline char getchar(void) {
         return (char)handler(SYSCALL_GETCHAR, 0, 0, 0);
     }
     return 0;
+}
+
+/* Clear the screen */
+static inline void clear(void) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        handler(SYSCALL_CLEAR, 0, 0, 0);
+    }
 }
 
 /* Execute a program with arguments (returns 0 on success, negative on error) */

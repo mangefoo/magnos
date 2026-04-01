@@ -11,12 +11,12 @@
 #define PRINT_HELLO_TXT      0
 #define ENABLE_HELLO_BINARY  0
 
-/* Binary buffer for loading programs (global to avoid stack issues) */
-static uint8_t binary_buffer[65536];
-
 /* Shell command buffer */
 static char shell_cmd_buf[64];
 static int shell_cmd_pos = 0;
+
+/* Binary buffer for loading programs (global to avoid stack issues) */
+static uint8_t binary_buffer[65536];
 
 /* Execute a command by loading and running a binary from the filesystem */
 static void execute_command(const char *cmd) {
@@ -269,33 +269,36 @@ void kernel_main(void) {
     }
 
     vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    vga_puts("System ready. Shell started.\n");
+    vga_puts("System ready.\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
-    /* Show prompt */
+    /* Try to launch userspace shell */
+    execute_command("shell");
+
+    /* Fallback to kernel shell if userspace shell is unavailable */
+    vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    vga_puts("Falling back to kernel shell.\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
     shell_cmd_pos = 0;
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    vga_puts("\nMagnOS> ");
-    serial_puts(SERIAL_COM1, "\nMagnOS> ");
+    vga_puts("MagnOS> ");
+    serial_puts(SERIAL_COM1, "MagnOS> ");
 
-    /* Shell loop - never returns */
     while (1) {
         char c = 0;
 
-        /* Check keyboard input */
         c = keyboard_getchar();
 
-        /* Check serial input if no keyboard input */
         if (c == 0 && serial_received(SERIAL_COM1)) {
             c = serial_getchar(SERIAL_COM1);
             if (c == '\r') c = '\n';
-            if (c == 0x7F) c = '\b';  /* DEL -> backspace */
+            if (c == 0x7F) c = '\b';
         }
 
         if (c == 0) continue;
 
         if (c == '\b') {
-            /* Backspace - remove character from buffer */
             if (shell_cmd_pos > 0) {
                 shell_cmd_pos--;
                 vga_puts("\b \b");
@@ -304,13 +307,11 @@ void kernel_main(void) {
                 serial_putchar(SERIAL_COM1, '\b');
             }
         } else if (c == '\n') {
-            /* Enter - execute command */
             vga_putchar('\n');
             serial_puts(SERIAL_COM1, "\r\n");
 
             shell_cmd_buf[shell_cmd_pos] = '\0';
             if (shell_cmd_pos > 0) {
-                /* Execute the command - splits on spaces automatically */
                 execute_command(shell_cmd_buf);
             }
 
@@ -319,7 +320,6 @@ void kernel_main(void) {
             vga_puts("MagnOS> ");
             serial_puts(SERIAL_COM1, "MagnOS> ");
         } else if (shell_cmd_pos < (int)sizeof(shell_cmd_buf) - 1) {
-            /* Regular character - add to buffer */
             shell_cmd_buf[shell_cmd_pos++] = c;
             vga_putchar(c);
             serial_putchar(SERIAL_COM1, c);

@@ -255,6 +255,11 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
             return 0; /* Success */
         }
 
+        case SYSCALL_CLEAR: {
+            vga_clear();
+            return 0;
+        }
+
         default:
             vga_puts("[Unknown syscall]\n");
             return (uint32_t)-1;

@@ -1,13 +1,13 @@
 #include "libmagnos.h"
 
-/* Helper function to copy a string */
-static void strcpy_custom(char *dest, const char *src) {
-    int i = 0;
-    while (src[i]) {
-        dest[i] = src[i];
-        i++;
+static int strncmp(const char *a, const char *b, int n) {
+    while (n && *a && *a == *b) {
+        a++;
+        b++;
+        n--;
     }
-    dest[i] = '\0';
+    if (n == 0) return 0;
+    return (unsigned char)*a - (unsigned char)*b;
 }
 
 /* Helper function to print a character */
@@ -41,6 +41,18 @@ int main(void) {
 
             cmd_buf[cmd_pos] = '\0';
             if (cmd_pos > 0) {
+                /* Built-in commands */
+                if (strncmp(cmd_buf, "clear", sizeof(cmd_buf)) == 0) {
+                    clear();
+                    cmd_pos = 0;
+                    print("MagnOS> ");
+                    continue;
+                }
+
+                if (strncmp(cmd_buf, "exit", sizeof(cmd_buf)) == 0) {
+                    return 0;
+                }
+
                 /* Execute the command */
                 int result = exec(cmd_buf);
 

@@ -48,8 +48,9 @@ ELF_OBJ = elf.o
 SYSCALL_OBJ = syscall.o
 KEYBOARD_OBJ = keyboard.o
 ARGS_OBJ = args.o
+SETJMP_OBJ = setjmp.o
 
-OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ) $(KEYBOARD_OBJ) $(ARGS_OBJ)
+OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ) $(KEYBOARD_OBJ) $(ARGS_OBJ) $(SETJMP_OBJ)
 
 # Default target
 all: $(OS_IMG)
@@ -89,6 +90,9 @@ $(SYSCALL_OBJ): syscall.c syscall.h vga.h elf.h fat32.h serial.h args.h keyboard
 
 $(KEYBOARD_OBJ): keyboard.c keyboard.h
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(SETJMP_OBJ): setjmp.asm
+	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Link kernel to ELF
 $(KERNEL_ELF): $(OBJS) linker.ld

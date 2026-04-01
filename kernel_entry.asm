@@ -8,7 +8,7 @@ global _start
 _start:
     ; Segments should already be set up by bootloader
     ; But let's make sure stack is correct
-    mov ebp, 0x90000
+    mov ebp, 0x1F0000
     mov esp, ebp
 
     ; Disable interrupts (we have no IDT)
