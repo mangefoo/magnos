@@ -289,6 +289,7 @@ void kernel_main(void) {
         if (c == 0 && serial_received(SERIAL_COM1)) {
             c = serial_getchar(SERIAL_COM1);
             if (c == '\r') c = '\n';
+            if (c == 0x7F) c = '\b';  /* DEL -> backspace */
         }
 
         if (c == 0) continue;
