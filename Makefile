@@ -1,14 +1,29 @@
 # Makefile for MagnOS
 
+# Cross-compiler prefix
+# macOS/Apple Silicon: brew install i686-elf-gcc (default)
+# Linux: override with `make CROSS=` to use native gcc -m32
+CROSS ?= i686-elf-
+
 # Tools
 ASM = nasm
-CC = gcc
-LD = ld
+CC = $(CROSS)gcc
+LD = $(CROSS)ld
+OBJCOPY = $(CROSS)objcopy
+MKFS_FAT = $(shell which mkfs.fat 2>/dev/null || echo /opt/homebrew/sbin/mkfs.fat)
 
 # Flags
 ASMFLAGS = -f elf32
-CFLAGS = -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -Wall -Wextra
-LDFLAGS = -m elf_i386 -T linker.ld
+# When using native gcc (CROSS=), add -m32; cross-compiler targets i686 natively
+ifeq ($(CROSS),)
+  ARCH_CFLAGS = -m32
+  ARCH_LDFLAGS = -m elf_i386
+else
+  ARCH_CFLAGS =
+  ARCH_LDFLAGS =
+endif
+CFLAGS = $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector -Wall -Wextra
+LDFLAGS = $(ARCH_LDFLAGS) -T linker.ld
 
 # Output files
 BOOT_BIN = boot.bin
@@ -81,51 +96,51 @@ $(KERNEL_ELF): $(OBJS) linker.ld
 
 # Convert ELF to flat binary
 $(KERNEL_BIN): $(KERNEL_ELF)
-	objcopy -O binary $< $@
+	$(OBJCOPY) -O binary $< $@
 
 # Create OS image
 $(OS_IMG): $(BOOT_BIN) $(KERNEL_BIN)
 	cat $(BOOT_BIN) $(KERNEL_BIN) > $@
 	# Pad to at least 1.44MB (floppy size)
-	@SIZE=$$(stat -c%s $@); \
+	@SIZE=$$(stat -f%z $@ 2>/dev/null || stat -c%s $@); \
 	if [ $$SIZE -lt 1474560 ]; then \
 		dd if=/dev/zero bs=1 count=$$((1474560 - $$SIZE)) >> $@; \
 	fi
 
 # Build userspace hello program
 $(HELLO_BIN): userspace/hello.c userspace/crt0.c userspace/libmagnos.h
-	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/hello.c
 
 # Build userspace print program
 $(PRINT_BIN): userspace/print.c userspace/crt0.c userspace/libmagnos.h
-	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/print.c
 
 # Build userspace ls program
 $(LS_BIN): userspace/ls.c userspace/crt0.c userspace/libmagnos.h
-	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/ls.c
 
 # Build userspace cat program
 $(CAT_BIN): userspace/cat.c userspace/crt0.c userspace/libmagnos.h
-	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/cat.c
 
 # Build userspace shell program
 $(SHELL_BIN): userspace/shell.c userspace/crt0.c userspace/libmagnos.h
-	$(CC) -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ userspace/crt0.c userspace/shell.c
 
 # Create hard disk image (10MB) formatted as FAT32
 $(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(LS_BIN) $(CAT_BIN) $(SHELL_BIN)
 	dd if=/dev/zero of=$@ bs=1M count=10
-	mkfs.fat -F 32 $@
+	$(MKFS_FAT) -F 32 $@
 	@echo "Created 10MB FAT32 disk image"
 	@if [ -f hello.txt ]; then \
 		mcopy -i $@ hello.txt ::HELLO.TXT && echo "Added hello.txt to disk"; \
