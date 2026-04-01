@@ -1,183 +1,116 @@
 # MagnOS
 
-A simple bootable x86 operating system written in C and assembly.
+A bootable x86 operating system written in C and assembly, built from scratch as a learning project.
 
 ## Features
 
 - Custom bootloader with protected mode switching
-- VGA text mode driver with color support
-- Serial port (COM1) driver for I/O
+- VGA text mode driver with color support and hardware cursor
+- Serial port (COM1) driver
+- PS/2 keyboard driver (interrupt-driven via IRQ1)
 - IDE/ATA hard disk driver
-- FAT32 filesystem support
-- Interactive serial console
+- FAT32 filesystem (read-only)
+- ELF binary loader with nested execution support
+- Interrupt Descriptor Table (IDT) with exception handlers
+- PIC remapping and PIT timer (100 Hz tick)
+- Userspace shell with built-in commands (`clear`, `exit`)
+- Syscall interface for userspace programs
 
 ## Requirements
 
-To build and run MagnOS, you need:
+### macOS (Apple Silicon)
 
-- `nasm` (Netwide Assembler)
-- `gcc` (GNU C Compiler) with 32-bit support
-- `ld` (GNU Linker)
-- `qemu-system-i386` (QEMU x86 emulator)
-
-### Installing dependencies
-
-On Ubuntu/Debian:
 ```bash
-sudo apt-get install nasm gcc-multilib qemu-system-x86
+brew install i686-elf-gcc nasm qemu mtools dosfstools
 ```
 
-On Fedora/RHEL:
-```bash
-sudo dnf install nasm gcc qemu-system-x86
-```
+### Linux (Debian/Ubuntu)
 
-On Arch Linux:
 ```bash
-sudo pacman -S nasm gcc qemu-system-x86
+sudo apt-get install nasm gcc-multilib qemu-system-x86 mtools dosfstools
 ```
 
 ## Building
 
-To build the OS image:
-
 ```bash
-make
+make              # Build the OS image (magnos.img)
+make CROSS=       # On Linux with native gcc (uses -m32)
 ```
-
-This will create `magnos.img`, a bootable floppy disk image.
 
 ## Running
 
-### Run in QEMU (recommended)
-
 ```bash
-make run
+make run          # Boot in QEMU (floppy only, falls back to kernel shell)
+make run-hdd      # Boot with FAT32 hard disk (launches userspace shell)
+make debug        # Boot with GDB server on port 1234
 ```
 
-This will start QEMU with the OS. You'll see output in both the QEMU window (VGA) and your terminal (serial).
+The OS outputs to both the QEMU VGA window and the terminal (serial). Type in either.
 
-### Run with FAT32 hard disk
+## Project Structure
 
-```bash
-make run-hdd
+```
+magnos/
+├── bootloader/
+│   └── boot.asm          # Bootloader: disk load, GDT, protected mode switch
+├── kernel/
+│   ├── kernel.c           # Main kernel: init, shell fallback
+│   ├── kernel_entry.asm   # Entry point: stack setup, calls kernel_main
+│   ├── vga.c/h            # VGA text mode driver
+│   ├── serial.c/h         # Serial port (COM1) driver
+│   ├── keyboard.c/h       # PS/2 keyboard (interrupt-driven, ring buffer)
+│   ├── ide.c/h            # IDE/ATA disk driver
+│   ├── fat32.c/h          # FAT32 filesystem
+│   ├── elf.c/h            # ELF binary loader
+│   ├── syscall.c/h        # Syscall handler (10 syscalls)
+│   ├── idt.c/h            # IDT, PIC remap, PIT timer, interrupt dispatcher
+│   ├── isr.asm            # ISR stubs (exceptions 0-31, IRQs 32-47)
+│   ├── setjmp.asm         # setjmp/longjmp for nested exec return
+│   ├── args.c/h           # Command-line argument parsing
+│   ├── io.h               # Shared port I/O (inb, outb)
+│   └── linker.ld          # Kernel memory layout (base 0x1000)
+├── userspace/
+│   ├── crt0.c             # C runtime startup
+│   ├── libmagnos.h        # Syscall wrappers for userspace
+│   ├── shell.c            # Interactive shell
+│   ├── ls.c               # Directory listing
+│   ├── cat.c              # File display
+│   ├── hello.c            # Hello world
+│   └── print.c            # Print utility
+├── build/                  # Build artifacts (generated)
+├── Makefile
+└── hello.txt               # Sample text file for the FAT32 disk
 ```
 
-This will:
-- Create a 10MB FAT32-formatted hard disk image (hdd.img) if it doesn't exist
-- Boot MagnOS with the hard disk attached
-- Initialize the IDE driver and mount the FAT32 filesystem
-- List all files in the root directory
+## Memory Layout
 
-### Run with QEMU monitor
-
-```bash
-make run-monitor
+```
+0x1000 - 0x4xxx    .text     Kernel code
+0x4xxx - 0x4xxx    .rodata   Strings, constants
+0x4xxx - 0x12xxxx  .bss      Static buffers
+0x1F0000           Stack     Kernel stack (grows downward)
+0x200000           Userspace Program load address
+0xB8000            VGA       Text mode buffer (80x25)
 ```
 
-This starts QEMU with a monitor accessible via telnet on port 55555.
+## Boot Process
 
-### Debug mode
-
-```bash
-make debug
-```
-
-This starts QEMU in debug mode, waiting for a GDB connection on port 1234.
-
-To connect with GDB:
-```bash
-gdb -ex "target remote localhost:1234" -ex "symbol-file kernel.bin"
-```
-
-## Architecture
-
-### Files
-
-- `boot.asm` - Bootloader (512 bytes, loads kernel and switches to protected mode)
-- `kernel_entry.asm` - Kernel entry point (calls C kernel)
-- `kernel.c` - Main kernel code
-- `vga.c/vga.h` - VGA text mode driver
-- `serial.c/serial.h` - Serial port driver (COM1)
-- `ide.c/ide.h` - IDE/ATA hard disk driver
-- `fat32.c/fat32.h` - FAT32 filesystem driver
-- `linker.ld` - Linker script
-- `Makefile` - Build system
-
-### Memory Layout
-
-- `0x7c00` - Bootloader loads here
-- `0x1000` - Kernel loads here
-- `0xB8000` - VGA text mode buffer
-
-### Boot Process
-
-1. BIOS loads bootloader at 0x7c00
-2. Bootloader loads kernel from disk to 0x1000
+1. BIOS loads bootloader (512 bytes) at 0x7C00
+2. Bootloader loads kernel from disk to 0x1000 (53 sectors across track boundaries)
 3. Bootloader sets up GDT and switches to 32-bit protected mode
-4. Bootloader jumps to kernel entry point
-5. Kernel initializes VGA, serial, and IDE drivers
-6. Kernel mounts FAT32 filesystem (if hard disk is attached)
-7. Kernel displays welcome message and file listing
-8. Kernel enters interactive serial console loop
+4. Kernel entry sets up stack at 0x1F0000, calls `kernel_main()`
+5. Kernel initializes drivers (VGA, serial, keyboard, IDE, FAT32)
+6. Kernel initializes IDT, remaps PIC, starts PIT timer, enables interrupts
+7. Kernel launches userspace shell (falls back to kernel shell if unavailable)
 
-## Interacting with the OS
-
-The OS provides an interactive echo loop via the serial port. Type in the terminal (where you ran `make run`) and see your input echoed back both in the terminal and on the VGA display.
-
-## Working with FAT32
-
-### Adding files to the disk
-
-You can add files to the FAT32 disk image using standard tools:
-
-**On Linux with mtools:**
-```bash
-# Copy a file to the disk
-mtools -i hdd.img mcopy myfile.txt ::MYFILE.TXT
-
-# List files on the disk
-mtools -i hdd.img mdir
-```
-
-**On Linux with mount:**
-```bash
-# Mount the disk image
-sudo mount -o loop hdd.img /mnt
-
-# Copy files
-sudo cp myfile.txt /mnt/
-
-# Unmount
-sudo umount /mnt
-```
-
-**On Windows:**
-- Use a tool like OSFMount or ImDisk to mount hdd.img as a drive
-- Copy files normally through Windows Explorer
-
-MagnOS will read and display all files in the root directory when it boots with the hard disk attached.
-
-## Cleaning
-
-To remove all build artifacts:
+## Adding Files to the Disk
 
 ```bash
-make clean
+mcopy -i hdd.img myfile.txt ::MYFILE.TXT
 ```
 
-## Extending
-
-This is a minimal OS kernel. You can extend it by adding:
-
-- Keyboard driver (PS/2)
-- Interrupt handling (IDT)
-- Memory management
-- Process/task management
-- FAT32 write support
-- More filesystems (ext2, etc.)
-- More device drivers
+FAT32 uses uppercase 8.3 filenames.
 
 ## License
 
-This is educational code. Use freely.
+Educational code. Use freely.

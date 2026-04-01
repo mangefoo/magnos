@@ -12,9 +12,14 @@ LD = $(CROSS)ld
 OBJCOPY = $(CROSS)objcopy
 MKFS_FAT = $(shell which mkfs.fat 2>/dev/null || echo /opt/homebrew/sbin/mkfs.fat)
 
+# Directories
+BOOT_DIR = bootloader
+KERN_DIR = kernel
+USER_DIR = userspace
+BUILD_DIR = build
+
 # Flags
 ASMFLAGS = -f elf32
-# When using native gcc (CROSS=), add -m32; cross-compiler targets i686 natively
 ifeq ($(CROSS),)
   ARCH_CFLAGS = -m32
   ARCH_LDFLAGS = -m elf_i386
@@ -22,89 +27,65 @@ else
   ARCH_CFLAGS =
   ARCH_LDFLAGS =
 endif
-CFLAGS = $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector -Wall -Wextra
-LDFLAGS = $(ARCH_LDFLAGS) -T linker.ld
+CFLAGS = $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector -Wall -Wextra -I$(KERN_DIR)
+LDFLAGS = $(ARCH_LDFLAGS) -T $(KERN_DIR)/linker.ld
 
 # Output files
-BOOT_BIN = boot.bin
-KERNEL_ELF = kernel.elf
-KERNEL_BIN = kernel.bin
+BOOT_BIN = $(BUILD_DIR)/boot.bin
+KERNEL_ELF = $(BUILD_DIR)/kernel.elf
+KERNEL_BIN = $(BUILD_DIR)/kernel.bin
 OS_IMG = magnos.img
 HDD_IMG = hdd.img
-HELLO_BIN = userspace/hello
-PRINT_BIN = userspace/print
-LS_BIN = userspace/ls
-CAT_BIN = userspace/cat
-SHELL_BIN = userspace/shell
+HELLO_BIN = $(USER_DIR)/hello
+PRINT_BIN = $(USER_DIR)/print
+LS_BIN = $(USER_DIR)/ls
+CAT_BIN = $(USER_DIR)/cat
+SHELL_BIN = $(USER_DIR)/shell
 
-# Object files
-KERNEL_ENTRY_OBJ = kernel_entry.o
-KERNEL_OBJ = kernel.o
-VGA_OBJ = vga.o
-SERIAL_OBJ = serial.o
-IDE_OBJ = ide.o
-FAT32_OBJ = fat32.o
-ELF_OBJ = elf.o
-SYSCALL_OBJ = syscall.o
-KEYBOARD_OBJ = keyboard.o
-ARGS_OBJ = args.o
-SETJMP_OBJ = setjmp.o
-IDT_OBJ = idt.o
-ISR_OBJ = isr.o
-
-OBJS = $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJ) $(VGA_OBJ) $(SERIAL_OBJ) $(IDE_OBJ) $(FAT32_OBJ) $(ELF_OBJ) $(SYSCALL_OBJ) $(KEYBOARD_OBJ) $(ARGS_OBJ) $(SETJMP_OBJ) $(IDT_OBJ) $(ISR_OBJ)
+# Kernel object files
+KERN_OBJS = \
+	$(BUILD_DIR)/kernel_entry.o \
+	$(BUILD_DIR)/kernel.o \
+	$(BUILD_DIR)/vga.o \
+	$(BUILD_DIR)/serial.o \
+	$(BUILD_DIR)/ide.o \
+	$(BUILD_DIR)/fat32.o \
+	$(BUILD_DIR)/elf.o \
+	$(BUILD_DIR)/syscall.o \
+	$(BUILD_DIR)/keyboard.o \
+	$(BUILD_DIR)/args.o \
+	$(BUILD_DIR)/setjmp.o \
+	$(BUILD_DIR)/idt.o \
+	$(BUILD_DIR)/isr.o
 
 # Default target
 all: $(OS_IMG)
 
+# Create build directory
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
 # Build bootloader
-$(BOOT_BIN): boot.asm
+$(BOOT_BIN): $(BOOT_DIR)/boot.asm | $(BUILD_DIR)
 	$(ASM) -f bin $< -o $@
 
-# Build kernel entry
-$(KERNEL_ENTRY_OBJ): kernel_entry.asm
+# Build kernel assembly objects
+$(BUILD_DIR)/kernel_entry.o: $(KERN_DIR)/kernel_entry.asm | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
-# Build kernel objects
-$(KERNEL_OBJ): kernel.c vga.h serial.h ide.h fat32.h elf.h syscall.h keyboard.h args.h idt.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(ARGS_OBJ): args.c args.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(VGA_OBJ): vga.c vga.h io.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(SERIAL_OBJ): serial.c serial.h io.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(IDE_OBJ): ide.c ide.h io.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(FAT32_OBJ): fat32.c fat32.h ide.h vga.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(ELF_OBJ): elf.c elf.h vga.h syscall.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(SYSCALL_OBJ): syscall.c syscall.h vga.h elf.h fat32.h serial.h args.h keyboard.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(KEYBOARD_OBJ): keyboard.c keyboard.h io.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(SETJMP_OBJ): setjmp.asm
+$(BUILD_DIR)/setjmp.o: $(KERN_DIR)/setjmp.asm | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
-$(IDT_OBJ): idt.c idt.h io.h vga.h keyboard.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(ISR_OBJ): isr.asm
+$(BUILD_DIR)/isr.o: $(KERN_DIR)/isr.asm | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
+
+# Build kernel C objects
+$(BUILD_DIR)/%.o: $(KERN_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link kernel to ELF
-$(KERNEL_ELF): $(OBJS) linker.ld
-	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+$(KERNEL_ELF): $(KERN_OBJS) $(KERN_DIR)/linker.ld
+	$(LD) $(LDFLAGS) -o $@ $(KERN_OBJS)
 
 # Convert ELF to flat binary
 $(KERNEL_BIN): $(KERNEL_ELF)
@@ -119,35 +100,31 @@ $(OS_IMG): $(BOOT_BIN) $(KERNEL_BIN)
 		dd if=/dev/zero bs=1 count=$$((1474560 - $$SIZE)) >> $@; \
 	fi
 
-# Build userspace hello program
-$(HELLO_BIN): userspace/hello.c userspace/crt0.c userspace/libmagnos.h
+# Build userspace programs
+$(HELLO_BIN): $(USER_DIR)/hello.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
 	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
-		-o $@ userspace/crt0.c userspace/hello.c
+		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/hello.c
 
-# Build userspace print program
-$(PRINT_BIN): userspace/print.c userspace/crt0.c userspace/libmagnos.h
+$(PRINT_BIN): $(USER_DIR)/print.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
 	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
-		-o $@ userspace/crt0.c userspace/print.c
+		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/print.c
 
-# Build userspace ls program
-$(LS_BIN): userspace/ls.c userspace/crt0.c userspace/libmagnos.h
+$(LS_BIN): $(USER_DIR)/ls.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
 	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
-		-o $@ userspace/crt0.c userspace/ls.c
+		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/ls.c
 
-# Build userspace cat program
-$(CAT_BIN): userspace/cat.c userspace/crt0.c userspace/libmagnos.h
+$(CAT_BIN): $(USER_DIR)/cat.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
 	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
-		-o $@ userspace/crt0.c userspace/cat.c
+		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/cat.c
 
-# Build userspace shell program
-$(SHELL_BIN): userspace/shell.c userspace/crt0.c userspace/libmagnos.h
+$(SHELL_BIN): $(USER_DIR)/shell.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
 	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
-		-o $@ userspace/crt0.c userspace/shell.c
+		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/shell.c
 
 # Create hard disk image (10MB) formatted as FAT32
 $(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(LS_BIN) $(CAT_BIN) $(SHELL_BIN)
@@ -196,6 +173,6 @@ debug: $(OS_IMG)
 
 # Clean build artifacts
 clean:
-	rm -f *.o *.bin *.elf *.img serial.log userspace/hello userspace/print userspace/ls userspace/cat userspace/shell userspace/*.o
+	rm -rf $(BUILD_DIR) *.img serial.log $(USER_DIR)/hello $(USER_DIR)/print $(USER_DIR)/ls $(USER_DIR)/cat $(USER_DIR)/shell $(USER_DIR)/*.o
 
 .PHONY: all run run-hdd run-serial-file run-monitor debug clean
