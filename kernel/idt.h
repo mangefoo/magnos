@@ -33,4 +33,10 @@ void idt_init(void);
 
 extern volatile uint32_t pit_ticks;
 
+/* Sleep for approximately the given number of milliseconds */
+void sleep_ms(uint32_t ms);
+
+/* Get system uptime in milliseconds since boot */
+uint32_t get_uptime_ms(void);
+
 #endif /* IDT_H */

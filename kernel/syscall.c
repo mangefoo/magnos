@@ -5,6 +5,7 @@
 #include "serial.h"
 #include "args.h"
 #include "keyboard.h"
+#include "idt.h"
 
 /* Memory functions */
 static uint32_t strlen(const char *str) {
@@ -259,6 +260,17 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
         case SYSCALL_CLEAR: {
             vga_clear();
             return 0;
+        }
+
+        case SYSCALL_SLEEP: {
+            /* arg1 = milliseconds to sleep */
+            sleep_ms(arg1);
+            return 0;
+        }
+
+        case SYSCALL_UPTIME: {
+            /* Returns uptime in milliseconds */
+            return get_uptime_ms();
         }
 
         default:

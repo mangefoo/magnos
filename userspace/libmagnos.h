@@ -12,6 +12,8 @@
 #define SYSCALL_GETCHAR    8
 #define SYSCALL_EXEC       9
 #define SYSCALL_CLEAR      10
+#define SYSCALL_SLEEP      11
+#define SYSCALL_UPTIME     12
 
 /* Directory entry structure (must match kernel definition) */
 typedef struct {
@@ -119,6 +121,23 @@ static inline int exec(const char *cmdline) {
         return (int)handler(SYSCALL_EXEC, (unsigned int)cmdline, 0, 0);
     }
     return -1;
+}
+
+/* Sleep for approximately the given number of milliseconds */
+static inline void sleep(unsigned int ms) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        handler(SYSCALL_SLEEP, ms, 0, 0);
+    }
+}
+
+/* Get system uptime in milliseconds since boot */
+static inline unsigned int uptime(void) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return handler(SYSCALL_UPTIME, 0, 0, 0);
+    }
+    return 0;
 }
 
 #endif /* LIBMAGNOS_H */

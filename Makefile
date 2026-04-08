@@ -41,6 +41,8 @@ PRINT_BIN = $(USER_DIR)/print
 LS_BIN = $(USER_DIR)/ls
 CAT_BIN = $(USER_DIR)/cat
 SHELL_BIN = $(USER_DIR)/shell
+UPTIME_BIN = $(USER_DIR)/uptime
+COUNT_BIN = $(USER_DIR)/count
 
 # Kernel object files
 KERN_OBJS = \
@@ -126,8 +128,18 @@ $(SHELL_BIN): $(USER_DIR)/shell.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
 		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
 		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/shell.c
 
+$(UPTIME_BIN): $(USER_DIR)/uptime.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
+	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
+		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/uptime.c
+
+$(COUNT_BIN): $(USER_DIR)/count.c $(USER_DIR)/crt0.c $(USER_DIR)/libmagnos.h
+	$(CC) $(ARCH_CFLAGS) -ffreestanding -nostdlib -fno-pie -fno-stack-protector \
+		-static -Wl,--entry=_start -Wl,-Ttext=0x200000 \
+		-o $@ $(USER_DIR)/crt0.c $(USER_DIR)/count.c
+
 # Create hard disk image (10MB) formatted as FAT32
-$(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(LS_BIN) $(CAT_BIN) $(SHELL_BIN)
+$(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(LS_BIN) $(CAT_BIN) $(SHELL_BIN) $(UPTIME_BIN) $(COUNT_BIN)
 	dd if=/dev/zero of=$@ bs=1M count=10
 	$(MKFS_FAT) -F 32 $@
 	@echo "Created 10MB FAT32 disk image"
@@ -148,6 +160,12 @@ $(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(LS_BIN) $(CAT_BIN) $(SHELL_BIN)
 	fi
 	@if [ -f $(SHELL_BIN) ]; then \
 		mcopy -i $@ $(SHELL_BIN) ::SHELL && echo "Added shell binary to disk"; \
+	fi
+	@if [ -f $(UPTIME_BIN) ]; then \
+		mcopy -i $@ $(UPTIME_BIN) ::UPTIME && echo "Added uptime binary to disk"; \
+	fi
+	@if [ -f $(COUNT_BIN) ]; then \
+		mcopy -i $@ $(COUNT_BIN) ::COUNT && echo "Added count binary to disk"; \
 	fi
 
 # Run in QEMU (no hard disk)
@@ -173,6 +191,6 @@ debug: $(OS_IMG)
 
 # Clean build artifacts
 clean:
-	rm -rf $(BUILD_DIR) *.img serial.log $(USER_DIR)/hello $(USER_DIR)/print $(USER_DIR)/ls $(USER_DIR)/cat $(USER_DIR)/shell $(USER_DIR)/*.o
+	rm -rf $(BUILD_DIR) *.img serial.log $(USER_DIR)/hello $(USER_DIR)/print $(USER_DIR)/ls $(USER_DIR)/cat $(USER_DIR)/shell $(USER_DIR)/uptime $(USER_DIR)/count $(USER_DIR)/*.o
 
 .PHONY: all run run-hdd run-serial-file run-monitor debug clean

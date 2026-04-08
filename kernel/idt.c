@@ -139,6 +139,21 @@ void isr_handler(struct isr_regs *regs) {
     }
 }
 
+/* Sleep for approximately the given number of milliseconds */
+void sleep_ms(uint32_t ms) {
+    uint32_t ticks_to_wait = ms / 10;  /* 100 Hz = 10ms per tick */
+    if (ticks_to_wait == 0) ticks_to_wait = 1;
+    uint32_t target = pit_ticks + ticks_to_wait;
+    while (pit_ticks < target) {
+        __asm__ volatile("hlt");  /* Sleep until next interrupt */
+    }
+}
+
+/* Get system uptime in milliseconds since boot */
+uint32_t get_uptime_ms(void) {
+    return pit_ticks * 10;  /* 100 Hz = 10ms per tick */
+}
+
 /* Initialize IDT, PIC, PIT, and enable interrupts */
 void idt_init(void) {
     /* ISR stub table */
