@@ -65,6 +65,7 @@ KERN_OBJS = \
 	$(BUILD_DIR)/pmm.o \
 	$(BUILD_DIR)/heap.o \
 	$(BUILD_DIR)/paging.o \
+	$(BUILD_DIR)/process.o \
 	$(BUILD_DIR)/gdt.o \
 	$(BUILD_DIR)/gdt_flush.o
 

@@ -16,6 +16,7 @@
 #define SYSCALL_UPTIME     12
 #define SYSCALL_MEMINFO    13
 #define SYSCALL_HEAP_STATS 14
+#define SYSCALL_GETPID     15
 
 /* Directory entry structure (must match kernel definition) */
 typedef struct {
@@ -89,6 +90,10 @@ static inline unsigned int heap_stats(unsigned int info_type) {
 
 static inline void sleep(unsigned int ms) {
     __syscall(SYSCALL_SLEEP, ms, 0, 0);
+}
+
+static inline unsigned int getpid(void) {
+    return __syscall(SYSCALL_GETPID, 0, 0, 0);
 }
 
 static inline unsigned int uptime(void) {

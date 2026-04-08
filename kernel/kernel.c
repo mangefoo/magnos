@@ -11,6 +11,7 @@
 #include "pmm.h"
 #include "heap.h"
 #include "paging.h"
+#include "process.h"
 
 /* Feature flags */
 #define PRINT_HELLO_TXT      0
@@ -141,6 +142,10 @@ void kernel_main(void) {
     /* Initialize paging (identity-mapped 0-16MB) */
     paging_init();
     vga_puts("Paging: OK\n");
+
+    /* Initialize process subsystem */
+    process_init();
+    vga_puts("Processes: OK\n");
 
     /* Initialize IDE */
     vga_puts("IDE Driver: ");

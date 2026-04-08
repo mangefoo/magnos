@@ -8,6 +8,7 @@
 #include "idt.h"
 #include "pmm.h"
 #include "heap.h"
+#include "process.h"
 
 /* Memory functions */
 static uint32_t strlen(const char *str) {
@@ -295,6 +296,11 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
                 case 2: return stats.total_bytes;
                 default: return (uint32_t)-1;
             }
+        }
+
+        case SYSCALL_GETPID: {
+            process_t *cur = process_get_current();
+            return cur ? cur->pid : 0;
         }
 
         default:
