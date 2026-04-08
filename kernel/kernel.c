@@ -16,6 +16,7 @@
 /* Feature flags */
 #define PRINT_HELLO_TXT      0
 #define ENABLE_HELLO_BINARY  0
+#define TEST_KERNEL_THREADS  0
 
 /* Shell command buffer */
 static char shell_cmd_buf[64];
@@ -90,6 +91,31 @@ static void execute_command(const char *cmd) {
         serial_puts(SERIAL_COM1, "\r\n");
     }
 }
+
+#if TEST_KERNEL_THREADS
+/* Simple busy-wait delay */
+static void busy_wait(void) {
+    for (volatile int i = 0; i < 5000000; i++) {}
+}
+
+/* Test kernel thread A */
+static void thread_a(void) {
+    while (1) {
+        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        vga_puts("[A]");
+        busy_wait();
+    }
+}
+
+/* Test kernel thread B */
+static void thread_b(void) {
+    while (1) {
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        vga_puts("[B]");
+        busy_wait();
+    }
+}
+#endif
 
 /* Kernel main function */
 void kernel_main(void) {
@@ -308,6 +334,20 @@ void kernel_main(void) {
     vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
     vga_puts("System ready.\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+#if TEST_KERNEL_THREADS
+    /* Test multitasking: create two kernel threads */
+    vga_puts("\nStarting kernel threads...\n");
+    process_create("thread_a", (uint32_t)thread_a);
+    process_create("thread_b", (uint32_t)thread_b);
+
+    /* PID 0 loops as a kernel thread too */
+    while (1) {
+        vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+        vga_puts("[K]");
+        busy_wait();
+    }
+#endif
 
     /* Try to launch userspace shell */
     execute_command("shell");

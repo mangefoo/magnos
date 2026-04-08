@@ -66,6 +66,7 @@ KERN_OBJS = \
 	$(BUILD_DIR)/heap.o \
 	$(BUILD_DIR)/paging.o \
 	$(BUILD_DIR)/process.o \
+	$(BUILD_DIR)/switch.o \
 	$(BUILD_DIR)/gdt.o \
 	$(BUILD_DIR)/gdt_flush.o
 
@@ -85,6 +86,9 @@ $(BUILD_DIR)/kernel_entry.o: $(KERN_DIR)/kernel_entry.asm | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 $(BUILD_DIR)/setjmp.o: $(KERN_DIR)/setjmp.asm | $(BUILD_DIR)
+	$(ASM) $(ASMFLAGS) $< -o $@
+
+$(BUILD_DIR)/switch.o: $(KERN_DIR)/switch.asm | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 $(BUILD_DIR)/gdt_flush.o: $(KERN_DIR)/gdt_flush.asm | $(BUILD_DIR)

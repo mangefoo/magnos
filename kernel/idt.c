@@ -3,6 +3,7 @@
 #include "vga.h"
 #include "keyboard.h"
 #include "syscall.h"
+#include "process.h"
 
 /* IDT table and pointer */
 static struct idt_entry idt[IDT_ENTRIES];
@@ -159,6 +160,14 @@ void isr_handler(struct isr_regs *regs) {
     if (regs->int_no == 32) {
         /* IRQ0: PIT timer tick */
         pit_ticks++;
+
+        /* Schedule every 10 ticks (100ms time slice) */
+        if (pit_ticks % 10 == 0) {
+            /* Send EOI before switching so timer keeps firing */
+            outb(0x20, 0x20);
+            schedule();
+            return;  /* EOI already sent */
+        }
     } else if (regs->int_no == 33) {
         /* IRQ1: Keyboard */
         keyboard_irq_handler();

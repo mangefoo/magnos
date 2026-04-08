@@ -39,4 +39,10 @@ process_t *process_get_current(void);
 /* Get process by pid */
 process_t *process_get(uint32_t pid);
 
+/* Round-robin scheduler — called from timer interrupt */
+void schedule(void);
+
+/* Context switch (defined in switch.asm) */
+extern void context_switch(uint32_t *old_esp, uint32_t new_esp);
+
 #endif /* PROCESS_H */

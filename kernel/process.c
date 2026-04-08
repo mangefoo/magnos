@@ -50,9 +50,35 @@ int process_create(const char *name, uint32_t entry) {
     p->pid = next_pid++;
     p->state = PROC_READY;
     p->kernel_stack = stack_page;
-    p->esp = stack_page + PAGE_SIZE;  /* Stack grows down */
     p->eip = entry;
     p->page_directory = 0;  /* Shared with kernel for now */
+
+    /*
+     * Build initial stack frame for context_switch:
+     * context_switch does popa + sti + ret, so we need:
+     *   [top of stack]
+     *   entry_point    <- ret pops this (EIP)
+     *   edi = 0        <- popa pops these (8 regs, 32 bytes)
+     *   esi = 0
+     *   ebp = 0
+     *   esp = 0 (ignored by popa)
+     *   ebx = 0
+     *   edx = 0
+     *   ecx = 0
+     *   eax = 0
+     *   [esp points here]
+     */
+    uint32_t *sp = (uint32_t *)(stack_page + PAGE_SIZE);
+    *(--sp) = entry;    /* Return address for ret */
+    *(--sp) = 0;        /* EDI */
+    *(--sp) = 0;        /* ESI */
+    *(--sp) = 0;        /* EBP */
+    *(--sp) = 0;        /* ESP (ignored by popa) */
+    *(--sp) = 0;        /* EBX */
+    *(--sp) = 0;        /* EDX */
+    *(--sp) = 0;        /* ECX */
+    *(--sp) = 0;        /* EAX */
+    p->esp = (uint32_t)sp;
 
     /* Set name */
     int i;
@@ -65,6 +91,43 @@ int process_create(const char *name, uint32_t entry) {
 
 process_t *process_get_current(void) {
     return current_proc;
+}
+
+void schedule(void) {
+    if (!current_proc)
+        return;
+
+    /* Find next READY process (round-robin) */
+    int current_slot = -1;
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        if (&proc_table[i] == current_proc) {
+            current_slot = i;
+            break;
+        }
+    }
+
+    int next_slot = -1;
+    for (int i = 1; i <= MAX_PROCESSES; i++) {
+        int idx = (current_slot + i) % MAX_PROCESSES;
+        if (proc_table[idx].state == PROC_READY) {
+            next_slot = idx;
+            break;
+        }
+    }
+
+    if (next_slot < 0 || next_slot == current_slot)
+        return;  /* No other process to switch to */
+
+    process_t *old = current_proc;
+    process_t *new = &proc_table[next_slot];
+
+    /* Update states */
+    if (old->state == PROC_RUNNING)
+        old->state = PROC_READY;
+    new->state = PROC_RUNNING;
+    current_proc = new;
+
+    context_switch(&old->esp, new->esp);
 }
 
 process_t *process_get(uint32_t pid) {
