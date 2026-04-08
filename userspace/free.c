@@ -58,5 +58,34 @@ int main(void) {
     print(buf);
     print(" free\n");
 
+    /* Heap stats */
+    unsigned int heap_free = heap_stats(0);
+    unsigned int heap_used = heap_stats(1);
+    unsigned int heap_total = heap_stats(2);
+
+    print("\nHeap:\n");
+    print("  Total: ");
+    uint_to_str(heap_total / 1024, buf);
+    print(buf);
+    print(" KB\n");
+
+    print("  Used:  ");
+    uint_to_str(heap_used / 1024, buf);
+    print(buf);
+    print(" KB\n");
+
+    print("  Free:  ");
+    uint_to_str(heap_free / 1024, buf);
+    print(buf);
+    print(" KB\n");
+
+    /* Total available = PMM free pages (excl. heap pages) + heap free bytes */
+    unsigned int heap_pages_used = heap_total / page_size;
+    unsigned int avail_kb = (free_pages + heap_pages_used) * (page_size / 1024);
+    print("\nTotal available: ");
+    uint_to_str(avail_kb, buf);
+    print(buf);
+    print(" KB\n");
+
     return 0;
 }

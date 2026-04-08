@@ -15,6 +15,7 @@
 #define SYSCALL_SLEEP      11
 #define SYSCALL_UPTIME     12
 #define SYSCALL_MEMINFO    13
+#define SYSCALL_HEAP_STATS 14
 
 /* Directory entry structure (must match kernel definition) */
 typedef struct {
@@ -129,6 +130,15 @@ static inline unsigned int meminfo(unsigned int info_type) {
     unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
     if (handler) {
         return handler(SYSCALL_MEMINFO, info_type, 0, 0);
+    }
+    return 0;
+}
+
+/* Get heap stats: type 0=free_bytes, 1=used_bytes, 2=total_bytes */
+static inline unsigned int heap_stats(unsigned int info_type) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return handler(SYSCALL_HEAP_STATS, info_type, 0, 0);
     }
     return 0;
 }

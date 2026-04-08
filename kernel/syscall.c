@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "idt.h"
 #include "pmm.h"
+#include "heap.h"
 
 /* Memory functions */
 static uint32_t strlen(const char *str) {
@@ -280,6 +281,18 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
                 case 0: return pmm_get_free_count();
                 case 1: return pmm_get_total_count();
                 case 2: return PAGE_SIZE;
+                default: return (uint32_t)-1;
+            }
+        }
+
+        case SYSCALL_HEAP_STATS: {
+            /* arg1: 0=free_bytes, 1=used_bytes, 2=total_bytes */
+            heap_stats_t stats;
+            heap_get_stats(&stats);
+            switch (arg1) {
+                case 0: return stats.free_bytes;
+                case 1: return stats.used_bytes;
+                case 2: return stats.total_bytes;
                 default: return (uint32_t)-1;
             }
         }

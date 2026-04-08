@@ -8,6 +8,7 @@
 #include "args.h"
 #include "idt.h"
 #include "pmm.h"
+#include "heap.h"
 
 /* Feature flags */
 #define PRINT_HELLO_TXT      0
@@ -120,6 +121,16 @@ void kernel_main(void) {
     vga_puts(" KB free (");
     vga_puthex(pmm_get_free_count());
     vga_puts(" pages)\n");
+
+    /* Initialize kernel heap */
+    heap_init();
+    {
+        heap_stats_t stats;
+        heap_get_stats(&stats);
+        vga_puts("Heap: ");
+        vga_puthex(stats.free_bytes / 1024);
+        vga_puts(" KB free\n");
+    }
 
     /* Initialize IDE */
     vga_puts("IDE Driver: ");

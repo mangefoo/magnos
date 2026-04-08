@@ -60,7 +60,8 @@ KERN_OBJS = \
 	$(BUILD_DIR)/setjmp.o \
 	$(BUILD_DIR)/idt.o \
 	$(BUILD_DIR)/isr.o \
-	$(BUILD_DIR)/pmm.o
+	$(BUILD_DIR)/pmm.o \
+	$(BUILD_DIR)/heap.o
 
 # Default target
 all: $(OS_IMG)
