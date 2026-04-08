@@ -24,140 +24,75 @@ typedef struct {
     unsigned char is_directory;
 } dirinfo_t;
 
-/* Syscall handler function pointer (set by kernel at 0x00100000) */
-#define __syscall_handler \
-    (*(unsigned int (**)(unsigned int, unsigned int, unsigned int, unsigned int))0x00100000)
+/* Generic syscall via int 0x80 */
+static inline unsigned int __syscall(unsigned int num, unsigned int a1,
+                                     unsigned int a2, unsigned int a3) {
+    unsigned int ret;
+    __asm__ volatile("int $0x80"
+        : "=a"(ret)
+        : "a"(num), "b"(a1), "c"(a2), "d"(a3)
+        : "memory");
+    return ret;
+}
 
-/* Print a string to the console */
 static inline int print(const char *str) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_PRINT, (unsigned int)str, 0, 0);
-    }
-    return -1;
+    return (int)__syscall(SYSCALL_PRINT, (unsigned int)str, 0, 0);
 }
 
-/* Exit the program */
 static inline void exit(int code) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        handler(SYSCALL_EXIT, (unsigned int)code, 0, 0);
-    }
+    __syscall(SYSCALL_EXIT, (unsigned int)code, 0, 0);
 }
 
-/* Open a file by name */
 static inline int file_open(const char *filename) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_FILE_OPEN, (unsigned int)filename, 0, 0);
-    }
-    return -1;
+    return (int)__syscall(SYSCALL_FILE_OPEN, (unsigned int)filename, 0, 0);
 }
 
-/* Read from currently open file */
 static inline int file_read(unsigned char *buffer, unsigned int size) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_FILE_READ, (unsigned int)buffer, size, 0);
-    }
-    return -1;
+    return (int)__syscall(SYSCALL_FILE_READ, (unsigned int)buffer, size, 0);
 }
 
-/* Close currently open file */
 static inline int file_close(void) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_FILE_CLOSE, 0, 0, 0);
-    }
-    return -1;
+    return (int)__syscall(SYSCALL_FILE_CLOSE, 0, 0, 0);
 }
 
-/* List directory contents */
 static inline int list_dir(dirinfo_t *entries, unsigned int max_entries) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_LIST_DIR, (unsigned int)entries, max_entries, 0);
-    }
-    return -1;
+    return (int)__syscall(SYSCALL_LIST_DIR, (unsigned int)entries, max_entries, 0);
 }
 
-/* Get argument count */
 static inline int get_argc(void) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_GET_ARGS, (unsigned int)-1, 0, 0);
-    }
-    return 0;
+    return (int)__syscall(SYSCALL_GET_ARGS, (unsigned int)-1, 0, 0);
 }
 
-/* Get argument by index (returns 0 on success, -1 on error) */
 static inline int get_arg(int index, char *buffer, unsigned int buf_size) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_GET_ARGS, (unsigned int)index, (unsigned int)buffer, buf_size);
-    }
-    return -1;
+    return (int)__syscall(SYSCALL_GET_ARGS, (unsigned int)index, (unsigned int)buffer, buf_size);
 }
 
-/* Get a character from keyboard or serial (blocking) */
 static inline char getchar(void) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (char)handler(SYSCALL_GETCHAR, 0, 0, 0);
-    }
-    return 0;
+    return (char)__syscall(SYSCALL_GETCHAR, 0, 0, 0);
 }
 
-/* Clear the screen */
 static inline void clear(void) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        handler(SYSCALL_CLEAR, 0, 0, 0);
-    }
+    __syscall(SYSCALL_CLEAR, 0, 0, 0);
 }
 
-/* Execute a program with arguments (returns 0 on success, negative on error) */
 static inline int exec(const char *cmdline) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return (int)handler(SYSCALL_EXEC, (unsigned int)cmdline, 0, 0);
-    }
-    return -1;
+    return (int)__syscall(SYSCALL_EXEC, (unsigned int)cmdline, 0, 0);
 }
 
-/* Get memory info: type 0=free pages, 1=total pages, 2=page size */
 static inline unsigned int meminfo(unsigned int info_type) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return handler(SYSCALL_MEMINFO, info_type, 0, 0);
-    }
-    return 0;
+    return __syscall(SYSCALL_MEMINFO, info_type, 0, 0);
 }
 
-/* Get heap stats: type 0=free_bytes, 1=used_bytes, 2=total_bytes */
 static inline unsigned int heap_stats(unsigned int info_type) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return handler(SYSCALL_HEAP_STATS, info_type, 0, 0);
-    }
-    return 0;
+    return __syscall(SYSCALL_HEAP_STATS, info_type, 0, 0);
 }
 
-/* Sleep for approximately the given number of milliseconds */
 static inline void sleep(unsigned int ms) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        handler(SYSCALL_SLEEP, ms, 0, 0);
-    }
+    __syscall(SYSCALL_SLEEP, ms, 0, 0);
 }
 
-/* Get system uptime in milliseconds since boot */
 static inline unsigned int uptime(void) {
-    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
-    if (handler) {
-        return handler(SYSCALL_UPTIME, 0, 0, 0);
-    }
-    return 0;
+    return __syscall(SYSCALL_UPTIME, 0, 0, 0);
 }
 
 #endif /* LIBMAGNOS_H */

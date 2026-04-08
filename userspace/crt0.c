@@ -15,8 +15,6 @@ void _start(void) {
     /* Exit with return code */
     exit(ret);
 
-    /* Hang */
-    while (1) {
-        __asm__ volatile("hlt");
-    }
+    /* Should never reach here */
+    while (1) { }
 }

@@ -1,6 +1,9 @@
 #include "elf.h"
 #include "vga.h"
 #include "syscall.h"
+#include "paging.h"
+#include "pmm.h"
+#include "gdt.h"
 
 /* setjmp/longjmp context buffer */
 typedef struct {
@@ -94,10 +97,6 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size) {
         }
     }
 
-    /* Set up syscall handler pointer at fixed address for userspace */
-    uint32_t *syscall_ptr = (uint32_t *)0x00100000;
-    *syscall_ptr = (uint32_t)syscall_handler;
-
     /* Get entry point */
     uint32_t entry = elf_header->e_entry;
 
@@ -111,19 +110,50 @@ int elf_load_and_exec(uint8_t *elf_data, uint32_t size) {
         return -1;
     }
 
+    /* Mark userspace pages as user-accessible */
+    for (uint32_t addr = 0x200000; addr < 0x300000; addr += PAGE_SIZE) {
+        paging_map(addr, addr, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    }
+    /* Map user stack page */
+    paging_map(0x300000, 0x300000, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+
     /* Save context; returns 0 on save, 1 when restored by elf_return_to_kernel */
     int depth = exec_depth++;
+    uint32_t saved_esp0;
+    __asm__ volatile("mov %%esp, %0" : "=r"(saved_esp0));
+
     if (exec_setjmp(&exec_stack[depth]) != 0) {
-        /* Returned from program exit */
+        /* Returned from program exit — restore TSS kernel stack */
         exec_depth--;
+        tss_set_kernel_stack(saved_esp0);
         return 0;
     }
 
-    /* Create function pointer and call it */
-    void (*entry_func)(void) = (void (*)(void))entry;
-    entry_func();
+    /* Set TSS.esp0 so interrupts from ring 3 use correct kernel stack position */
+    uint32_t current_esp;
+    __asm__ volatile("mov %%esp, %0" : "=r"(current_esp));
+    tss_set_kernel_stack(current_esp);
 
-    /* Program returned normally without calling exit */
+    /* Switch to ring 3 via iret */
+    __asm__ volatile(
+        "mov $0x23, %%ax\n\t"     /* USER_DS = 0x20 | RPL 3 */
+        "mov %%ax, %%ds\n\t"
+        "mov %%ax, %%es\n\t"
+        "mov %%ax, %%fs\n\t"
+        "mov %%ax, %%gs\n\t"
+        "pushl $0x23\n\t"         /* SS = USER_DS */
+        "pushl $0x301000\n\t"     /* ESP = top of user stack */
+        "pushfl\n\t"              /* EFLAGS */
+        "orl $0x200, (%%esp)\n\t" /* Ensure IF is set */
+        "pushl $0x1B\n\t"         /* CS = USER_CS = 0x18 | RPL 3 */
+        "pushl %%esi\n\t"         /* EIP = entry point */
+        "iret"
+        :
+        : "S"(entry)
+        : "memory", "eax"
+    );
+
+    /* Unreachable — return is via SYSCALL_EXIT → longjmp */
     exec_depth--;
     return 0;
 }

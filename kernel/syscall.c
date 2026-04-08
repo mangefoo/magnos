@@ -233,7 +233,7 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
              * so it can be restored after the new program exits.
              * This is necessary because all programs load to 0x200000.
              */
-            static uint8_t saved_program[1048576]; /* 1MB buffer for saving caller */
+            static uint8_t saved_program[1048576 + 4096]; /* 1MB program + 4KB user stack */
             uint8_t *program_base = (uint8_t *)0x200000;
             uint32_t save_size = sizeof(saved_program);
 

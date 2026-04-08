@@ -55,6 +55,11 @@ void paging_map(uint32_t virt, uint32_t phys, uint32_t flags) {
         kernel_page_directory[pd_idx] = (uint32_t)pt | PAGE_PRESENT | PAGE_WRITABLE;
     }
 
+    /* Propagate PAGE_USER to directory entry if needed */
+    if (flags & PAGE_USER) {
+        kernel_page_directory[pd_idx] |= PAGE_USER;
+    }
+
     uint32_t *pt = (uint32_t *)PAGE_FRAME(kernel_page_directory[pd_idx]);
     pt[pt_idx] = (phys & 0xFFFFF000) | (flags & 0xFFF) | PAGE_PRESENT;
 

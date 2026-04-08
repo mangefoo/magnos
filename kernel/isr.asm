@@ -73,6 +73,9 @@ ISR_NOERRCODE 45    ; IRQ13 - FPU
 ISR_NOERRCODE 46    ; IRQ14 - Primary ATA
 ISR_NOERRCODE 47    ; IRQ15 - Secondary ATA
 
+; Syscall interrupt (int 0x80)
+ISR_NOERRCODE 128   ; Syscall
+
 ; Common stub: saves state, calls C handler, restores and irets
 isr_common_stub:
     pusha               ; Save EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI

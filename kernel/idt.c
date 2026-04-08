@@ -2,6 +2,7 @@
 #include "io.h"
 #include "vga.h"
 #include "keyboard.h"
+#include "syscall.h"
 
 /* IDT table and pointer */
 static struct idt_entry idt[IDT_ENTRIES];
@@ -147,6 +148,14 @@ void isr_handler(struct isr_regs *regs) {
         __asm__ volatile("cli; hlt");
     }
 
+    /* Syscall: int 0x80 */
+    if (regs->int_no == 128) {
+        /* Re-enable interrupts (int gate clears IF) so timer/keyboard work */
+        __asm__ volatile("sti");
+        regs->eax = syscall_handler(regs->eax, regs->ebx, regs->ecx, regs->edx);
+        return;
+    }
+
     if (regs->int_no == 32) {
         /* IRQ0: PIT timer tick */
         pit_ticks++;
@@ -195,6 +204,10 @@ void idt_init(void) {
     for (int i = 0; i < 48; i++) {
         idt_set_gate(i, (uint32_t)isrs[i], 0x08, IDT_GATE_INT32);
     }
+
+    /* Register syscall interrupt (int 0x80) — accessible from ring 3 */
+    extern void isr128(void);
+    idt_set_gate(128, (uint32_t)isr128, 0x08, IDT_GATE_INT32_USER);
 
     /* Load IDT */
     idtp.limit = sizeof(idt) - 1;

@@ -24,10 +24,12 @@ struct isr_regs {
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
     uint32_t int_no, err_code;
     uint32_t eip, cs, eflags;
+    uint32_t useresp, ss;  /* Only valid on ring 3 -> ring 0 transition */
 };
 
 #define IDT_ENTRIES 256
-#define IDT_GATE_INT32 0x8E  /* Present, ring 0, 32-bit interrupt gate */
+#define IDT_GATE_INT32      0x8E  /* Present, ring 0, 32-bit interrupt gate */
+#define IDT_GATE_INT32_USER 0xEE  /* Present, ring 3, 32-bit interrupt gate */
 
 void idt_init(void);
 
