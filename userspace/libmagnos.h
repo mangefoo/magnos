@@ -14,6 +14,7 @@
 #define SYSCALL_CLEAR      10
 #define SYSCALL_SLEEP      11
 #define SYSCALL_UPTIME     12
+#define SYSCALL_MEMINFO    13
 
 /* Directory entry structure (must match kernel definition) */
 typedef struct {
@@ -121,6 +122,15 @@ static inline int exec(const char *cmdline) {
         return (int)handler(SYSCALL_EXEC, (unsigned int)cmdline, 0, 0);
     }
     return -1;
+}
+
+/* Get memory info: type 0=free pages, 1=total pages, 2=page size */
+static inline unsigned int meminfo(unsigned int info_type) {
+    unsigned int (*handler)(unsigned int, unsigned int, unsigned int, unsigned int) = __syscall_handler;
+    if (handler) {
+        return handler(SYSCALL_MEMINFO, info_type, 0, 0);
+    }
+    return 0;
 }
 
 /* Sleep for approximately the given number of milliseconds */

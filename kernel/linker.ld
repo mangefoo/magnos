@@ -26,4 +26,8 @@ SECTIONS
         *(COMMON)
         *(.bss)
     }
+
+    /* Page-aligned symbol marking end of kernel image */
+    . = ALIGN(4096);
+    _kernel_end = .;
 }

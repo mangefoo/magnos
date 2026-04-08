@@ -16,6 +16,7 @@
 #define SYSCALL_CLEAR      10
 #define SYSCALL_SLEEP      11
 #define SYSCALL_UPTIME     12
+#define SYSCALL_MEMINFO    13
 
 /* Syscall handler */
 uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uint32_t arg3);

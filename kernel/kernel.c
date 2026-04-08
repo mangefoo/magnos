@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "args.h"
 #include "idt.h"
+#include "pmm.h"
 
 /* Feature flags */
 #define PRINT_HELLO_TXT      0
@@ -111,6 +112,14 @@ void kernel_main(void) {
     /* Initialize IDT and enable interrupts */
     idt_init();
     vga_puts("IDT/Interrupts: OK\n");
+
+    /* Initialize physical memory manager */
+    pmm_init();
+    vga_puts("PMM: ");
+    vga_puthex(pmm_get_free_count() * 4);
+    vga_puts(" KB free (");
+    vga_puthex(pmm_get_free_count());
+    vga_puts(" pages)\n");
 
     /* Initialize IDE */
     vga_puts("IDE Driver: ");

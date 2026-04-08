@@ -6,6 +6,7 @@
 #include "args.h"
 #include "keyboard.h"
 #include "idt.h"
+#include "pmm.h"
 
 /* Memory functions */
 static uint32_t strlen(const char *str) {
@@ -271,6 +272,16 @@ uint32_t syscall_handler(uint32_t syscall_num, uint32_t arg1, uint32_t arg2, uin
         case SYSCALL_UPTIME: {
             /* Returns uptime in milliseconds */
             return get_uptime_ms();
+        }
+
+        case SYSCALL_MEMINFO: {
+            /* arg1: 0=free pages, 1=total pages, 2=page size */
+            switch (arg1) {
+                case 0: return pmm_get_free_count();
+                case 1: return pmm_get_total_count();
+                case 2: return PAGE_SIZE;
+                default: return (uint32_t)-1;
+            }
         }
 
         default:
