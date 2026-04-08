@@ -6,6 +6,7 @@
 #include "syscall.h"
 #include "keyboard.h"
 #include "args.h"
+#include "gdt.h"
 #include "idt.h"
 #include "pmm.h"
 #include "heap.h"
@@ -106,6 +107,10 @@ void kernel_main(void) {
     vga_puts("Bootable x86 Operating System\n");
     vga_puts("VGA Driver: OK\n");
     vga_puts("Serial Driver: OK\n");
+
+    /* Initialize GDT with kernel/user segments and TSS */
+    gdt_init();
+    vga_puts("GDT/TSS: OK\n");
 
     /* Initialize keyboard */
     keyboard_init();

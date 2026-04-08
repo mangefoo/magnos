@@ -63,7 +63,9 @@ KERN_OBJS = \
 	$(BUILD_DIR)/isr.o \
 	$(BUILD_DIR)/pmm.o \
 	$(BUILD_DIR)/heap.o \
-	$(BUILD_DIR)/paging.o
+	$(BUILD_DIR)/paging.o \
+	$(BUILD_DIR)/gdt.o \
+	$(BUILD_DIR)/gdt_flush.o
 
 # Default target
 all: $(OS_IMG)
@@ -81,6 +83,9 @@ $(BUILD_DIR)/kernel_entry.o: $(KERN_DIR)/kernel_entry.asm | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 $(BUILD_DIR)/setjmp.o: $(KERN_DIR)/setjmp.asm | $(BUILD_DIR)
+	$(ASM) $(ASMFLAGS) $< -o $@
+
+$(BUILD_DIR)/gdt_flush.o: $(KERN_DIR)/gdt_flush.asm | $(BUILD_DIR)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 $(BUILD_DIR)/isr.o: $(KERN_DIR)/isr.asm | $(BUILD_DIR)
