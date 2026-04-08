@@ -9,6 +9,7 @@
 #include "idt.h"
 #include "pmm.h"
 #include "heap.h"
+#include "paging.h"
 
 /* Feature flags */
 #define PRINT_HELLO_TXT      0
@@ -131,6 +132,10 @@ void kernel_main(void) {
         vga_puthex(stats.free_bytes / 1024);
         vga_puts(" KB free\n");
     }
+
+    /* Initialize paging (identity-mapped 0-16MB) */
+    paging_init();
+    vga_puts("Paging: OK\n");
 
     /* Initialize IDE */
     vga_puts("IDE Driver: ");

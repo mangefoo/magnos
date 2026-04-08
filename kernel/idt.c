@@ -104,7 +104,32 @@ static void pit_init(void) {
 /* C interrupt dispatcher — called from isr_common_stub */
 void isr_handler(struct isr_regs *regs) {
     if (regs->int_no < 32) {
-        /* CPU exception */
+        /* Page Fault — show detailed diagnostics */
+        if (regs->int_no == 14) {
+            uint32_t faulting_addr;
+            __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
+
+            vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            vga_puts("\n*** PAGE FAULT ***\n");
+            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+            vga_puts("Address: ");
+            vga_puthex(faulting_addr);
+            vga_puts("\nEIP: ");
+            vga_puthex(regs->eip);
+            vga_puts("\n  ");
+            vga_puts((regs->err_code & 0x1) ? "Page-protection" : "Non-present page");
+            vga_puts(", ");
+            vga_puts((regs->err_code & 0x2) ? "Write" : "Read");
+            vga_puts(", ");
+            vga_puts((regs->err_code & 0x4) ? "User-mode" : "Kernel-mode");
+            vga_puts("\n");
+
+            vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            vga_puts("System halted.\n");
+            __asm__ volatile("cli; hlt");
+        }
+
+        /* Other CPU exceptions */
         vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         vga_puts("\n*** EXCEPTION: ");
         vga_puts(exception_names[regs->int_no]);
