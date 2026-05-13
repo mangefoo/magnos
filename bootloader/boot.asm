@@ -1,177 +1,250 @@
-; Simple bootloader for x86 OS
-; This loads the kernel from disk and jumps to it
+; MagnOS bootloader — CHS reads kernel from floppy, sets a VBE LFB graphics
+; mode, then enters 32-bit protected mode and jumps to the kernel at 0x10000.
 
 [BITS 16]
 [ORG 0x7c00]
 
-KERNEL_OFFSET equ 0x1000  ; Load kernel at 1MB mark
+KERNEL_SEG       equ 0x1000           ; load kernel at linear 0x10000
+MODE_INFO_BLOCK  equ 0x8000           ; 256-byte VBE mode info buffer
+BOOT_INFO        equ 0x9000           ; struct passed to kernel:
+                                      ;   +0  dword pitch
+                                      ;   +4  dword width
+                                      ;   +8  dword height
+                                      ;   +12 dword bpp
+                                      ;   +16 dword lfb_phys
+                                      ;   +20 dword mode_ok
 
 start:
-    ; Save boot drive (BIOS passes it in DL)
     mov [BOOT_DRIVE], dl
-
-    ; Set up segments
     xor ax, ax
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov sp, 0x7c00  ; Stack grows downward from bootloader
+    mov sp, 0x7c00
 
-    ; Print loading message
-    mov si, msg_loading
-    call print_string
+    call serial_setup
+    mov al, 'B'
+    call serial_putc
 
-    ; Load kernel from disk
     call load_kernel
 
-    ; Print success message
-    mov si, msg_loaded
-    call print_string
+    mov al, 'L'
+    call serial_putc
 
-    ; Switch to protected mode
+    call set_video_mode
+
+    mov al, 'V'
+    call serial_putc
+
     call switch_to_pm
-
-    ; Should never reach here
     jmp $
 
-; Print string function (SI = pointer to null-terminated string)
-print_string:
-    pusha
-.loop:
-    lodsb
-    or al, al
-    jz .done
-    mov ah, 0x0e
-    int 0x10
-    jmp .loop
-.done:
-    popa
+;------------------------------------------------------------
+; Minimal real-mode COM1 serial for debug breadcrumbs (38400 8N1)
+;------------------------------------------------------------
+serial_setup:
+    mov dx, 0x3F9
+    xor al, al
+    out dx, al
+    mov dx, 0x3FB
+    mov al, 0x80
+    out dx, al
+    mov dx, 0x3F8
+    mov al, 3
+    out dx, al
+    mov dx, 0x3F9
+    xor al, al
+    out dx, al
+    mov dx, 0x3FB
+    mov al, 0x03
+    out dx, al
+    mov dx, 0x3FC
+    mov al, 0x03
+    out dx, al
     ret
 
-; Load kernel from disk
-; Floppy: 18 sectors/track, 2 heads. Boot sector is track 0, head 0, sector 1.
-; Kernel starts at sector 2. First read: sectors 2-18 (17 sectors) from head 0.
-; Second read: sectors 1-18 (18 sectors) from head 1.
-; Third read: sectors 1-18 (18 sectors) from cylinder 1, head 0.
-; Total: 17 + 18 + 18 = 53 sectors = 27136 bytes (enough for kernel)
+; AL = char to send (preserved)
+serial_putc:
+    push dx
+    push ax
+    mov ah, al
+.wait:
+    mov dx, 0x3FD
+    in al, dx
+    test al, 0x20
+    jz .wait
+    mov dx, 0x3F8
+    mov al, ah
+    out dx, al
+    pop ax
+    pop dx
+    ret
+
+;------------------------------------------------------------
+; CHS load: 100 sectors starting after the boot sector, into 0x10000.
+; Floppy is 18 sectors/track, 2 heads.
+;------------------------------------------------------------
 load_kernel:
-    pusha
-    mov dl, [BOOT_DRIVE]
+    mov ax, KERNEL_SEG
+    mov es, ax
+    xor bx, bx
 
-    ; Read 1: 17 sectors from CHS 0/0/2
-    mov bx, KERNEL_OFFSET
-    mov ah, 0x02
-    mov al, 17             ; 17 sectors (2 through 18)
-    mov ch, 0              ; cylinder 0
-    mov cl, 2              ; start at sector 2
-    mov dh, 0              ; head 0
-    int 0x13
-    jc disk_error
+    mov cx, 0x0002      ; cyl=0, sector=2
+    mov dh, 0
+    mov al, 17
+    call read_track
 
-    ; Read 2: 18 sectors from CHS 0/1/1
-    add bx, 17 * 512
-    mov ah, 0x02
+    mov cx, 0x0001
+    mov dh, 1
     mov al, 18
-    mov ch, 0              ; cylinder 0
-    mov cl, 1              ; sector 1
-    mov dh, 1              ; head 1
-    mov dl, [BOOT_DRIVE]
-    int 0x13
-    jc disk_error
+    call read_track
 
-    ; Read 3: 18 sectors from CHS 1/0/1
-    add bx, 18 * 512
-    mov ah, 0x02
+    mov cx, 0x0101
+    mov dh, 0
     mov al, 18
-    mov ch, 1              ; cylinder 1
-    mov cl, 1              ; sector 1
-    mov dh, 0              ; head 0
-    mov dl, [BOOT_DRIVE]
-    int 0x13
-    jc disk_error
+    call read_track
 
-    popa
+    mov cx, 0x0101
+    mov dh, 1
+    mov al, 18
+    call read_track
+
+    mov cx, 0x0201
+    mov dh, 0
+    mov al, 18
+    call read_track
+
+    mov cx, 0x0201
+    mov dh, 1
+    mov al, 11
+    call read_track
     ret
+
+; Reads AL sectors at CHS (CH=cyl,CL=sec,DH=head) into ES:BX.
+; Advances ES so the next call appends.
+read_track:
+    mov [sec_count], al
+    mov dl, [BOOT_DRIVE]
+    mov ah, 0x02
+    mov al, [sec_count]
+    int 0x13
+    jc disk_error
+    push ax
+    movzx ax, byte [sec_count]
+    shl ax, 5
+    mov bx, es
+    add bx, ax
+    mov es, bx
+    pop ax
+    xor bx, bx
+    ret
+
+sec_count: db 0
 
 disk_error:
-    mov si, msg_disk_error
-    call print_string
+    mov al, 'E'
+    call serial_putc
     jmp $
 
-; Switch to protected mode
-switch_to_pm:
-    cli                     ; Disable interrupts
-    lgdt [gdt_descriptor]   ; Load GDT
+;------------------------------------------------------------
+; Set a VBE LFB mode and save info at BOOT_INFO.
+; Tries 1024x768, 800x600, then 640x480 — all 32bpp candidates.
+;------------------------------------------------------------
+set_video_mode:
+    xor ax, ax
+    mov es, ax                       ; VBE buffers live at ES:DI, need ES=0
+    mov dword [BOOT_INFO + 20], 0
+    mov cx, 0x118
+    call try_mode
+    jnc .ok
+    mov cx, 0x115
+    call try_mode
+    jnc .ok
+    mov cx, 0x112
+    call try_mode
+.ok:
+    ret
 
-    ; Enable protected mode
+; CX = base mode number. Sets mode + LFB; on success records info, CF=0.
+try_mode:
+    mov ax, 0x4F01
+    mov di, MODE_INFO_BLOCK
+    int 0x10
+    cmp ax, 0x004F
+    jne .fail
+    mov bx, cx
+    or bx, 0x4000
+    mov ax, 0x4F02
+    int 0x10
+    cmp ax, 0x004F
+    jne .fail
+    movzx eax, word [MODE_INFO_BLOCK + 0x10]
+    mov [BOOT_INFO + 0], eax
+    movzx eax, word [MODE_INFO_BLOCK + 0x12]
+    mov [BOOT_INFO + 4], eax
+    movzx eax, word [MODE_INFO_BLOCK + 0x14]
+    mov [BOOT_INFO + 8], eax
+    movzx eax, byte [MODE_INFO_BLOCK + 0x19]
+    mov [BOOT_INFO + 12], eax
+    mov eax, [MODE_INFO_BLOCK + 0x28]
+    mov [BOOT_INFO + 16], eax
+    mov dword [BOOT_INFO + 20], 1
+    clc
+    ret
+.fail:
+    stc
+    ret
+
+;------------------------------------------------------------
+; Enter 32-bit protected mode and call into the kernel.
+;------------------------------------------------------------
+switch_to_pm:
+    cli
+    lgdt [gdt_descriptor]
     mov eax, cr0
     or eax, 0x1
     mov cr0, eax
-
-    ; Far jump to clear pipeline and enter 32-bit mode
     jmp CODE_SEG:init_pm
 
 [BITS 32]
 init_pm:
-    ; Set up segment registers
     mov ax, DATA_SEG
     mov ds, ax
     mov ss, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
-
-    ; Set up stack
     mov ebp, 0x90000
     mov esp, ebp
-
-    ; Jump to kernel
-    call KERNEL_OFFSET
-
-    ; Hang if kernel returns
+    call 0x10000
     jmp $
 
-; GDT
 gdt_start:
-    ; Null descriptor
     dq 0x0
-
 gdt_code:
-    ; Code segment descriptor
-    dw 0xffff       ; Limit (bits 0-15)
-    dw 0x0          ; Base (bits 0-15)
-    db 0x0          ; Base (bits 16-23)
-    db 10011010b    ; Access byte
-    db 11001111b    ; Flags + Limit (bits 16-19)
-    db 0x0          ; Base (bits 24-31)
-
+    dw 0xffff
+    dw 0x0
+    db 0x0
+    db 10011010b
+    db 11001111b
+    db 0x0
 gdt_data:
-    ; Data segment descriptor
-    dw 0xffff       ; Limit (bits 0-15)
-    dw 0x0          ; Base (bits 0-15)
-    db 0x0          ; Base (bits 16-23)
-    db 10010010b    ; Access byte
-    db 11001111b    ; Flags + Limit (bits 16-19)
-    db 0x0          ; Base (bits 24-31)
-
+    dw 0xffff
+    dw 0x0
+    db 0x0
+    db 10010010b
+    db 11001111b
+    db 0x0
 gdt_end:
 
 gdt_descriptor:
-    dw gdt_end - gdt_start - 1  ; Size
-    dd gdt_start                 ; Address
+    dw gdt_end - gdt_start - 1
+    dd gdt_start
 
-; Constants
 CODE_SEG equ gdt_code - gdt_start
 DATA_SEG equ gdt_data - gdt_start
 
-; Messages
-msg_loading db 'Loading kernel...', 0x0d, 0x0a, 0
-msg_loaded db 'MagnOS loaded', 0x0d, 0x0a, 0
-msg_disk_error db 'Disk read error!', 0x0d, 0x0a, 0
-
-; Variables
 BOOT_DRIVE db 0
 
-; Pad to 510 bytes and add boot signature
 times 510-($-$$) db 0
 dw 0xaa55

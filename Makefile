@@ -68,7 +68,11 @@ KERN_OBJS = \
 	$(BUILD_DIR)/process.o \
 	$(BUILD_DIR)/switch.o \
 	$(BUILD_DIR)/gdt.o \
-	$(BUILD_DIR)/gdt_flush.o
+	$(BUILD_DIR)/gdt_flush.o \
+	$(BUILD_DIR)/framebuffer.o \
+	$(BUILD_DIR)/mouse.o \
+	$(BUILD_DIR)/gui.o \
+	$(BUILD_DIR)/calc.o
 
 # Default target
 all: $(OS_IMG)
@@ -212,6 +216,11 @@ $(HDD_IMG): $(HELLO_BIN) $(PRINT_BIN) $(LS_BIN) $(CAT_BIN) $(SHELL_BIN) $(UPTIME
 run: $(OS_IMG)
 	qemu-system-i386 -drive file=$(OS_IMG),format=raw,index=0,if=floppy -serial stdio
 
+# Run the GUI build in QEMU with std VGA (VBE-capable) + default PS/2 mouse
+run-gui: $(OS_IMG)
+	qemu-system-i386 -drive file=$(OS_IMG),format=raw,index=0,if=floppy \
+		-vga std -m 64M -serial stdio
+
 # Run in QEMU with hard disk
 run-hdd: $(OS_IMG) $(HDD_IMG)
 	qemu-system-i386 -drive file=$(OS_IMG),format=raw,index=0,if=floppy -drive file=$(HDD_IMG),format=raw,if=ide,index=0,media=disk -boot a -serial stdio
@@ -233,4 +242,4 @@ debug: $(OS_IMG)
 clean:
 	rm -rf $(BUILD_DIR) *.img serial.log $(USER_DIR)/hello $(USER_DIR)/print $(USER_DIR)/ls $(USER_DIR)/cat $(USER_DIR)/shell $(USER_DIR)/uptime $(USER_DIR)/count $(USER_DIR)/free $(USER_DIR)/pftest $(USER_DIR)/ring3 $(USER_DIR)/*.o
 
-.PHONY: all run run-hdd run-serial-file run-monitor debug clean
+.PHONY: all run run-gui run-hdd run-serial-file run-monitor debug clean

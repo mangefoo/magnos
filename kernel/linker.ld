@@ -1,11 +1,10 @@
-/* Linker script for the kernel */
+/* Linker script for the kernel — loaded at linear 0x10000 by the bootloader */
 
 ENTRY(_start)
 
 SECTIONS
 {
-    /* Kernel starts at 1MB in physical memory */
-    . = 0x1000;
+    . = 0x10000;
 
     .text : {
         *(.text)

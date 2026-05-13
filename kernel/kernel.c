@@ -1,405 +1,66 @@
-#include "vga.h"
 #include "serial.h"
-#include "ide.h"
-#include "fat32.h"
-#include "elf.h"
-#include "syscall.h"
-#include "keyboard.h"
-#include "args.h"
 #include "gdt.h"
 #include "idt.h"
 #include "pmm.h"
 #include "heap.h"
 #include "paging.h"
 #include "process.h"
+#include "framebuffer.h"
+#include "mouse.h"
+#include "gui.h"
+#include "calc.h"
 
-/* Feature flags */
-#define PRINT_HELLO_TXT      0
-#define ENABLE_HELLO_BINARY  0
-#define TEST_KERNEL_THREADS  0
-
-/* Shell command buffer */
-static char shell_cmd_buf[64];
-static int shell_cmd_pos = 0;
-
-/* Binary buffer for loading programs (global to avoid stack issues) */
-static uint8_t binary_buffer[65536];
-
-/* Execute a command by loading and running a binary from the filesystem */
-static void execute_command(const char *cmd) {
-    char program_name[64];
-
-    /* Parse command line into program and arguments */
-    parse_command_line(cmd, program_name, &current_program_args);
-
-    /* Convert program name to uppercase for FAT32 8.3 filename */
-    char filename[12];
-    int i;
-    for (i = 0; program_name[i] && i < 11; i++) {
-        char ch = program_name[i];
-        if (ch >= 'a' && ch <= 'z') {
-            filename[i] = ch - 32;
-        } else {
-            filename[i] = ch;
-        }
-    }
-    filename[i] = '\0';
-
-    /* Try to open the file */
-    fat32_file_t *file = fat32_open(filename);
-    if (file) {
-        if (file->size > 0 && file->size <= sizeof(binary_buffer)) {
-            int bytes_read = fat32_read(file, binary_buffer, file->size);
-            fat32_close(file);
-
-            if (bytes_read > 0) {
-                /* Check if it's an ELF file */
-                if (binary_buffer[0] == 0x7f &&
-                    binary_buffer[1] == 'E' &&
-                    binary_buffer[2] == 'L' &&
-                    binary_buffer[3] == 'F') {
-
-                    syscall_init();
-                    if (elf_load_and_exec(binary_buffer, bytes_read) != 0) {
-                        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-                        vga_puts("Failed to execute binary\n");
-                        serial_puts(SERIAL_COM1, "Failed to execute binary\r\n");
-                    }
-                } else {
-                    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-                    vga_puts("Not an ELF binary\n");
-                    serial_puts(SERIAL_COM1, "Not an ELF binary\r\n");
-                }
-            } else {
-                vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-                vga_puts("Failed to read file\n");
-                serial_puts(SERIAL_COM1, "Failed to read file\r\n");
-            }
-        } else {
-            fat32_close(file);
-            vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-            vga_puts("File too large\n");
-            serial_puts(SERIAL_COM1, "File too large\r\n");
-        }
-    } else {
-        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-        vga_puts("Command not found: ");
-        vga_puts(filename);
-        vga_putchar('\n');
-        serial_puts(SERIAL_COM1, "Command not found: ");
-        serial_puts(SERIAL_COM1, filename);
-        serial_puts(SERIAL_COM1, "\r\n");
-    }
+static void log_init(const char *name, int ok) {
+    serial_puts(SERIAL_COM1, name);
+    serial_puts(SERIAL_COM1, ok ? ": OK\r\n" : ": FAILED\r\n");
 }
 
-#if TEST_KERNEL_THREADS
-/* Simple busy-wait delay */
-static void busy_wait(void) {
-    for (volatile int i = 0; i < 5000000; i++) {}
-}
-
-/* Test kernel thread A */
-static void thread_a(void) {
-    while (1) {
-        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-        vga_puts("[A]");
-        busy_wait();
-    }
-}
-
-/* Test kernel thread B */
-static void thread_b(void) {
-    while (1) {
-        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-        vga_puts("[B]");
-        busy_wait();
-    }
-}
-#endif
-
-/* Kernel main function */
 void kernel_main(void) {
-    /* Initialize VGA */
-    vga_init();
-
-    /* Initialize serial port COM1 */
     serial_init(SERIAL_COM1);
+    serial_puts(SERIAL_COM1, "\r\n=== MagnOS booting (GUI mode) ===\r\n");
 
-    /* Display welcome message on VGA */
-    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    vga_puts("MagnOS v0.1\n");
-    vga_puts("===========\n\n");
-
-    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    vga_puts("Bootable x86 Operating System\n");
-    vga_puts("VGA Driver: OK\n");
-    vga_puts("Serial Driver: OK\n");
-
-    /* Initialize GDT with kernel/user segments and TSS */
     gdt_init();
-    vga_puts("GDT/TSS: OK\n");
+    log_init("GDT/TSS", 1);
 
-    /* Initialize keyboard */
-    keyboard_init();
-    vga_puts("Keyboard Driver: OK\n");
-
-    /* Initialize IDT and enable interrupts */
+    /* Keyboard not needed by the calculator, but the controller
+     * commands the mouse driver issues live on the same chip. */
     idt_init();
-    vga_puts("IDT/Interrupts: OK\n");
+    log_init("IDT/Interrupts", 1);
 
-    /* Initialize physical memory manager */
     pmm_init();
-    vga_puts("PMM: ");
-    vga_puthex(pmm_get_free_count() * 4);
-    vga_puts(" KB free (");
-    vga_puthex(pmm_get_free_count());
-    vga_puts(" pages)\n");
+    log_init("PMM", 1);
 
-    /* Initialize kernel heap */
     heap_init();
-    {
-        heap_stats_t stats;
-        heap_get_stats(&stats);
-        vga_puts("Heap: ");
-        vga_puthex(stats.free_bytes / 1024);
-        vga_puts(" KB free\n");
-    }
+    log_init("Heap", 1);
 
-    /* Initialize paging (identity-mapped 0-16MB) */
     paging_init();
-    vga_puts("Paging: OK\n");
+    log_init("Paging", 1);
 
-    /* Initialize process subsystem */
     process_init();
-    vga_puts("Processes: OK\n");
+    log_init("Processes", 1);
 
-    /* Initialize IDE */
-    vga_puts("IDE Driver: ");
-    if (ide_init() == 0) {
-        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-        vga_puts("OK\n");
-        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    } else {
-        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        vga_puts("FAILED\n");
-        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    }
-    vga_puts("\n");
+    /* Framebuffer comes up after paging so we can map the LFB. */
+    int fb_ok = (fb_init() == 0);
+    log_init("Framebuffer", fb_ok);
 
-    /* Send message to serial port */
-    serial_puts(SERIAL_COM1, "MagnOS v0.1 - Serial port initialized\n");
-    serial_puts(SERIAL_COM1, "Kernel loaded successfully\n");
-
-    /* Demonstrate color output */
-    vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    vga_puts("System initialized successfully!\n\n");
-
-    /* Display some system info */
-    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    vga_puts("Kernel at: ");
-    vga_puthex((uint32_t)kernel_main);
-    vga_puts("\n");
-
-    vga_puts("VGA at: ");
-    vga_puthex(VGA_MEMORY);
-    vga_puts("\n");
-
-    vga_puts("Serial COM1: ");
-    vga_puthex(SERIAL_COM1);
-    vga_puts("\n\n");
-
-    /* Initialize FAT32 filesystem */
-    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    vga_puts("Initializing FAT32 Filesystem...\n");
-    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-    vga_puts("FAT32: ");
-    if (fat32_init(0) == 0) {
-        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-        vga_puts("OK\n\n");
-        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-        /* List files */
-        fat32_list_root();
-        vga_puts("\n");
-
-#if PRINT_HELLO_TXT
-        /* Try to read hello.txt */
-        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-        vga_puts("Reading HELLO.TXT...\n");
-        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-        fat32_file_t *file = fat32_open("HELLO.TXT");
-        if (file) {
-            vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-            vga_puts("File found! Contents:\n");
-            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-            vga_puts("---\n");
-
-            /* Read file contents (max 512 bytes for now) */
-            uint8_t buffer[512];
-            int bytes_read = fat32_read(file, buffer, sizeof(buffer) - 1);
-
-            if (bytes_read > 0) {
-                /* Null terminate */
-                buffer[bytes_read] = '\0';
-
-                /* Print contents */
-                for (int i = 0; i < bytes_read; i++) {
-                    vga_putchar(buffer[i]);
-                }
-            } else {
-                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-                vga_puts("Failed to read file\n");
-            }
-
-            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-            vga_puts("\n---\n");
-            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-            fat32_close(file);
-        } else {
-            vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-            vga_puts("File not found\n");
-            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        }
-
-        vga_puts("\n");
-#endif
-
-#if ENABLE_HELLO_BINARY
-        /* Try to load and execute HELLO binary */
-        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-        vga_puts("Loading HELLO binary...\n");
-        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-        fat32_file_t *bin_file = fat32_open("HELLO");
-        if (bin_file) {
-            vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-            vga_puts("Binary found! Size: ");
-            vga_puthex(bin_file->size);
-            vga_puts(" bytes\n");
-            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-            /* Allocate buffer for binary (max 64KB) */
-            static uint8_t binary_buffer[65536];
-
-            if (bin_file->size > sizeof(binary_buffer)) {
-                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-                vga_puts("Binary too large!\n");
-                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-            } else {
-                /* Read entire binary */
-                int bytes_read = fat32_read(bin_file, binary_buffer, bin_file->size);
-
-                if (bytes_read > 0) {
-                    vga_puts("Binary loaded. ");
-
-                    /* Initialize syscalls */
-                    syscall_init();
-
-                    /* Load and execute ELF binary */
-                    if (elf_load_and_exec(binary_buffer, bytes_read) == 0) {
-                        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-                        vga_puts("\nBinary execution successful!\n");
-                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-                    } else {
-                        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-                        vga_puts("Failed to execute binary\n");
-                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-                    }
-                } else {
-                    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-                    vga_puts("Failed to read binary\n");
-                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-                }
-            }
-
-            fat32_close(bin_file);
-        } else {
-            vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-            vga_puts("Binary not found (add HELLO file to disk)\n");
-            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        }
-
-        vga_puts("\n");
-#endif
-    } else {
-        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        vga_puts("FAILED\n");
-        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        vga_puts("(Disk may not be formatted as FAT32)\n\n");
+    if (!fb_ok) {
+        serial_puts(SERIAL_COM1, "VBE mode not set by bootloader — halting.\r\n");
+        for (;;) __asm__ volatile("cli; hlt");
     }
 
-    vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    vga_puts("System ready.\n");
-    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    /* Paint a splash so the screen isn't blank if the mouse takes a moment. */
+    fb_clear(FB_DESKTOP);
+    fb_draw_string(20, 20, "MagnOS booting...", FB_WHITE, 2);
 
-#if TEST_KERNEL_THREADS
-    /* Test multitasking: create two kernel threads */
-    vga_puts("\nStarting kernel threads...\n");
-    process_create("thread_a", (uint32_t)thread_a);
-    process_create("thread_b", (uint32_t)thread_b);
+    mouse_init();
+    log_init("PS/2 Mouse", 1);
 
-    /* PID 0 loops as a kernel thread too */
-    while (1) {
-        vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-        vga_puts("[K]");
-        busy_wait();
-    }
-#endif
+    gui_init();
+    log_init("GUI", 1);
 
-    /* Try to launch userspace shell */
-    execute_command("shell");
+    serial_puts(SERIAL_COM1, "Launching calculator.\r\n");
+    calc_run();
 
-    /* Fallback to kernel shell if userspace shell is unavailable */
-    vga_set_color(VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    vga_puts("Falling back to kernel shell.\n");
-    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-    shell_cmd_pos = 0;
-    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    vga_puts("MagnOS> ");
-    serial_puts(SERIAL_COM1, "MagnOS> ");
-
-    while (1) {
-        char c = 0;
-
-        c = keyboard_getchar();
-
-        if (c == 0 && serial_received(SERIAL_COM1)) {
-            c = serial_getchar(SERIAL_COM1);
-            if (c == '\r') c = '\n';
-            if (c == 0x7F) c = '\b';
-        }
-
-        if (c == 0) continue;
-
-        if (c == '\b') {
-            if (shell_cmd_pos > 0) {
-                shell_cmd_pos--;
-                vga_puts("\b \b");
-                serial_putchar(SERIAL_COM1, '\b');
-                serial_putchar(SERIAL_COM1, ' ');
-                serial_putchar(SERIAL_COM1, '\b');
-            }
-        } else if (c == '\n') {
-            vga_putchar('\n');
-            serial_puts(SERIAL_COM1, "\r\n");
-
-            shell_cmd_buf[shell_cmd_pos] = '\0';
-            if (shell_cmd_pos > 0) {
-                execute_command(shell_cmd_buf);
-            }
-
-            shell_cmd_pos = 0;
-            vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-            vga_puts("MagnOS> ");
-            serial_puts(SERIAL_COM1, "MagnOS> ");
-        } else if (shell_cmd_pos < (int)sizeof(shell_cmd_buf) - 1) {
-            shell_cmd_buf[shell_cmd_pos++] = c;
-            vga_putchar(c);
-            serial_putchar(SERIAL_COM1, c);
-        }
-    }
+    /* calc_run never returns; this is just defensive. */
+    for (;;) __asm__ volatile("cli; hlt");
 }

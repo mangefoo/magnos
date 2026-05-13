@@ -2,6 +2,7 @@
 #include "io.h"
 #include "vga.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "syscall.h"
 #include "process.h"
 
@@ -171,6 +172,9 @@ void isr_handler(struct isr_regs *regs) {
     } else if (regs->int_no == 33) {
         /* IRQ1: Keyboard */
         keyboard_irq_handler();
+    } else if (regs->int_no == 44) {
+        /* IRQ12: PS/2 Mouse */
+        mouse_irq_handler();
     }
 
     /* Send EOI to PIC */
@@ -229,9 +233,10 @@ void idt_init(void) {
     /* Configure PIT */
     pit_init();
 
-    /* Unmask IRQ0 (timer) and IRQ1 (keyboard), mask all others */
-    outb(0x21, 0xFC);  /* PIC1: 11111100 — only IRQ0 and IRQ1 enabled */
-    outb(0xA1, 0xFF);  /* PIC2: all masked */
+    /* Unmask IRQ0 (timer), IRQ1 (keyboard), IRQ2 (cascade to PIC2),
+     * and IRQ12 (mouse). All others stay masked. */
+    outb(0x21, 0xF8);  /* PIC1: 11111000 — IRQ0,1,2 enabled */
+    outb(0xA1, 0xEF);  /* PIC2: 11101111 — IRQ12 enabled */
 
     /* Enable interrupts */
     __asm__ volatile("sti");
